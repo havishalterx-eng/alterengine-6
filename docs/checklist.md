@@ -21,11 +21,11 @@ of Track C are ours, not the plan's. They are called out rather than folded in s
 *Days · Havish only. Written answers are the deliverable — a paragraph each. Three of the
 five block later phases outright.*
 
-**Brief prepared 2026-09-08: [`phase-0-decisions.md`](phase-0-decisions.md)** — each question
-with what the codebase actually says, the options, and a recommendation. Fill in the Answer
-fields; the recommendations are not decisions.
+**PHASE 0 CLOSED 2026-09-08.** All five answered with rationale in
+[`phase-0-decisions.md`](phase-0-decisions.md); derived logic appended to the design log as
+§30–§33. No code changed.
 
-- [ ] **0.1 memory credential** — *blocks Phase 2.* Memory forwards its caller's token to
+- [x] **0.1 memory credential** — *blocks Phase 2.* Memory forwards its caller's token to
       an endpoint that derives tenancy from the token itself, and minting a tenant-scoped
       one is off the table since #113. Either that endpoint accepts a tenant explicitly
       alongside a service credential, or the cycle stays.
@@ -33,12 +33,12 @@ fields; the recommendations are not decisions.
       §24: `TaskSkeleton` is canonical.** Replan re-enters the design path, and L5 is what
       produces the DAG, so replan must hand back what that path consumes. Implementation is
       task 2.2.
-- [ ] **0.3 auto-creation tier** — *blocks Phase 3.* Issue #125. Creating at the requested
+- [x] **0.3 auto-creation tier** — *blocks Phase 3.* Issue #125. Creating at the requested
       tier converges but lets any caller conjure a `CEILING`-tier agent. **The action
       plan's own read: refuse above a ceiling — safer, and makes the failure visible.**
       Design log §9's pre-flight budget gate offers a third option (create at the requested
       tier, bound abuse with spend caps). Pick one.
-- [ ] **0.4 requirements map** — *latent.* Issue #117. Who fills `node_requirements` on the
+- [x] **0.4 requirements map** — *latent.* Issue #117. Who fills `node_requirements` on the
       architecture path — the compiler by re-resolving, or the caller who already decided?
       Nothing reads the column today, so this can wait, but not indefinitely.
 - [x] **0.5 action vocabulary** — *blocked a platform item.* **Closed 2026-09-08 from
@@ -50,10 +50,10 @@ fields; the recommendations are not decisions.
 issue. No code has changed.
 
 **Also open, not in the action plan:**
-- [ ] **0.6 [+] Voice and Repository Manager scope.** Cut or scope both explicitly. Until
+- [x] **0.6 [+] Voice and Repository Manager scope.** Cut or scope both explicitly. Until
       then they distort every count. (The plan handles these in Phase 5; this is the
       decision that gates that phase.)
-- [ ] **0.7 [+] Architecture docs status.** Are `component-contracts` (2,100 lines),
+- [x] **0.7 [+] Architecture docs status.** Are `component-contracts` (2,100 lines),
       `layer-architecture`, `plane-architecture` and `whole-architecture` binding standards,
       or superseded by the design log?
 
@@ -105,9 +105,10 @@ or the observable behaviour does not change. **Do not let these be picked up sep
 that is how three independent-looking tickets each get closed while the product still
 cannot heal itself.
 
-- [!] **2.1 credential edge** — from decision 0.1. If the orchestration endpoint takes an
-      explicit tenant, that is an additive parameter plus a guard that it matches the
-      service credential's scope. *Blocked.*
+- [ ] **2.1 credential edge** — from decision 0.1, now answered (design log §30). Additive
+      tenant parameter on orchestration's `/internal/` routes; Memory stops discarding it.
+      Plus: a tenant mismatch **refuses with a named reason** rather than degrading to "not
+      found", and every service-asserted tenant is audited. *Unblocked.*
 - [ ] **2.2 replan and recompile** — from decision 0.2, now answered. Send `TaskSkeleton`.
       Revives two of eight dead strategies. `repair` decides correctly then defers — finish
       it in the same pass; it is an omission, not a boundary.
@@ -136,9 +137,12 @@ binding from an incorrect one.
       the winner; `agent_id ASC` decides it. The correctly-scoring `/bind-architecture`
       exists but has never run in the execution path — **treat as a migration with a
       fallback, not a swap.**
-- [ ] **3.3 auto-creation** — from decision 0.3. Whatever the tier decision, also make the
-      no-match path idempotent per tenant, workspace and capability set, so a retrying
-      caller stops writing a row per attempt.
+- [ ] **3.0 [+] auto-creation idempotency** — **pulled out of Phase 0 and out of 3.3. Do
+      immediately, ahead of everything.** Not a policy decision, and it corrupts tenant data
+      every time a caller retries. Unique on tenant + workspace + capability set.
+- [ ] **3.3 auto-creation tier** — from decision 0.3 (design log §31). Never create an agent
+      that cannot satisfy the requirement that triggered it: above the configured ceiling,
+      **fail the bind with a named reason**. Ceiling is config, default `STANDARD`.
 - [ ] **3.4 capability resolver** — independent. Advanced-tier terms are tested before
       fast-tier ones in a plain if/elif, so an incidental adjective decides the tier.
       Replace set membership with something that reads the request.
@@ -182,12 +186,14 @@ against a real provider.
 *4–8 weeks · scope depends on decisions.* Both need a product decision before an
 engineering one. See 0.6.
 
-- [ ] **5.1 voice** — contract only. Six RPCs declared (`BindNumber`, `GetNumberBinding`,
+- [x] **5.1 voice** — **CUT 2026-09-08** (design log §33). Remove or deprecate the
+      declaration; a note is not a cut. Was: contract only. Six RPCs declared (`BindNumber`, `GetNumberBinding`,
       `ConfigureCallHandling`, `InitiateCall`, `GetAccountHealth`, `GetCapabilities`), no
       implementation under `apps/`. Needs a telephony vendor, a number-provisioning story,
       and a decision about whether voice ships at all. **The design log never mentions voice
       once** — not deferred like Project Mode, simply absent.
-- [ ] **5.2 repository manager** — declared, never built. C9. No backend contract to build
+- [x] **5.2 repository manager** — **CUT 2026-09-08** (design log §33). Remove or deprecate
+      the declaration. Was: declared, never built. C9. No backend contract to build
       against.
 - [ ] **5.3 deployment manager** — surface only. C8. The backend contract is real
       (`DeployctlService`, three RPCs); only the surface is missing. Cheapest of the three —
@@ -287,6 +293,14 @@ demo.
 - [ ] **C10 Run Manager atomic budget gate** (§22) — must be atomic, not read-then-decide.
 - [ ] **C11 Policy Store global tier**, structurally incapable of holding tenant content
       (§22).
+- [ ] **C13 map the 54 contracts onto the 61 components** — from decision 0.7. Replace the
+      proposed blast radius / fail mode / driver values in `components/` with
+      `architecture/component-contracts.md`'s. Its done gates are targets, not gates that
+      fail today. Roughly a day; closes design log §29's open item.
+- [ ] **C14 node_requirements single source of truth** — from decision 0.4's recorded
+      residual. A stored map plus fresh run-time resolution is §7 pattern 4. Either run-time
+      consumers read the column, or it is deleted. Touches the frozen Executor, so **after
+      revival**, not during.
 - [ ] **C12 verify §5.1 and §5.2 exist at all** — structured success criteria and mechanical
       read-back. **Absence is currently inferred, not established.** Check before scheduling;
       if genuinely missing this is a subsystem, not a patch.

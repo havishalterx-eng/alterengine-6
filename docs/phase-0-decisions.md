@@ -90,7 +90,18 @@ per-service Auth0 M2M applications exist, the same call sites tighten without ch
 
 **Answer:**
 
-> _(to be filled in)_
+**Approved 2026-09-08 — option A, with two additions found by attacking the first draft.**
+
+Orchestration's `/internal/` routes accept an explicit tenant alongside a service credential, per the pattern `service_auth.py` already documents and `ads-core/src/deletion/router.py` already uses. Memory stops discarding `tenant_id` at `orchestration_client.py:51`.
+
+**Two additions the first draft missed.** The original recommendation made tenant isolation — design log §2, the first locked decision — depend on a shared secret held by every service, and did not say so. Therefore:
+
+1. **A mismatch refuses explicitly, with a named reason.** `run-outcome.service.ts:236` already queries `WHERE tenant_id = $1 AND run_id = $2` inside `withTenant()`, so a wrong assertion already returns nothing — but as an indistinguishable "not found" rather than a refusal. Fail-closed means saying why.
+2. **Every service-asserted tenant is audited.** The shared credential is the weak point; the trail is what makes a leak recoverable.
+
+**Stated limitation.** Every service presents the same token today, so this authenticates *that the caller is an Alter service*, not *which one*. Acceptable now, tightens to RS256 per-service verification when M2M applications exist, with call sites unchanged.
+
+Recorded as design log **§30**. Implementation is task 2.1.
 
 ---
 
@@ -159,7 +170,19 @@ Fix idempotency in the same pass either way.
 
 **Answer:**
 
-> _(to be filled in)_
+**Approved 2026-09-08 — reframed after attacking the first draft.**
+
+The first draft treated this as a cost question. It is primarily a **correctness** question: the engine creates an agent that cannot satisfy the requirement that triggered its creation, and the failure surfaces several steps downstream where the cause is no longer recoverable.
+
+**Three parts:**
+
+1. **Idempotency leaves Phase 0 entirely.** It is not a policy decision, nobody disagrees about it, and it is corrupting tenant data now — every retry permanently adds an agent row. Fix immediately as its own ticket, unique on tenant + workspace + capability set.
+2. **Never create a doomed agent.** When the requested tier exceeds policy, **fail the bind with a named reason** rather than substituting a cheaper agent that will fail the same filter.
+3. **The ceiling is a config value, defaulting to `STANDARD`, raisable per deployment** — not a constant, and not a global judgment about what tiers should exist.
+
+Revisit once Run Manager's atomic budget gate exists (task C10): spend caps address the real objection to unbounded tiers, and the ceiling should then be lifted deliberately rather than left in place by inertia.
+
+Recorded as design log **§31**. Implementation is task 3.3, with idempotency pulled out ahead of it.
 
 ---
 
@@ -200,7 +223,15 @@ Do it during Phase 3 while the architecture path is still fresh in someone's hea
 
 **Answer:**
 
-> _(to be filled in)_
+**Approved 2026-09-08 — option B, with the residual problem recorded rather than hidden.**
+
+The architecture path copies the requirements map from what the caller already supplied. Verified in code that this is nearly free: `architecture_synthesizer/models.py:115` validates `request.node_requirements` against the node keys, so the data is present at the call site and is simply not persisted.
+
+**What attacking the first draft found.** Filling the column leaves the system with two sources for one fact — the stored map, and the fresh resolution the Executor (`nodeexec.service.ts:386`) and Recovery (`recovery-dispatch.service.ts:343`) each perform at run time. That is design log §7 pattern 4, duplicated primitives drifting apart, arrived at from the other direction. **Option B does not close that.**
+
+The clean resolution is for run-time consumers to read the stored value instead of re-resolving, or for the column to be deleted as redundant. **Deferred, because it touches the Executor, which is frozen during revival.** Logged as a Track C item so it is not forgotten.
+
+Recorded as design log **§32**. Implementation is task 3.6.
 
 ---
 
@@ -258,7 +289,17 @@ vendor decision in the same breath, or it will sit exactly where it is.
 
 **Answer:**
 
-> _(to be filled in)_
+**Approved 2026-09-08 — cut both.**
+
+**Voice: cut.** Six RPCs declared, no implementation under `apps/`, no telephony vendor in the repository. The first draft recommended this without checking whether a voice product elsewhere in the portfolio depended on this engine — that was the right question and it was asked: **Axon is a separate product and does not run on this engine.** Nothing outside the engine argues for keeping it, and the design log never mentioned it at all — unlike Project Mode, which §23 deferred explicitly.
+
+**Repository Manager: cut.** Declared, never implemented, and unlike Deployment Manager it has no backend contract to build against. Nobody has stated what it is for.
+
+**Cutting means removing or deprecating the declaration, not writing a note.** A contract that remains generates clients, appears in counts, and sits inside every estimate of remaining work — which is the cost that made this worth deciding.
+
+Deployment Manager is **not** cut: its backend contract is real (`DeployctlService`, three RPCs) and only the surface is missing. It stays as task 5.3.
+
+Recorded as design log **§33**.
 
 ---
 
@@ -315,7 +356,19 @@ exist in exactly one place, on one laptop, outside version control.
 
 **Answer:**
 
-> _(to be filled in)_
+**Approved 2026-09-08 — three different treatments, not one.**
+
+The first draft said "binding," which would have made 54 contracts into gates against a codebase we have promised not to touch — manufacturing 54 blockers on day one, several of them against frozen Category 1 components.
+
+1. **All five documents imported into `docs/architecture/`** — done 2026-09-08, unconditional and independent of everything below. They existed in one place, on one laptop, with no backup.
+2. **`layers.md`, `planes.md`, `whole.md` — binding now.** They describe structure and impose no per-component obligation, so adopting them creates nothing to violate.
+3. **`component-contracts.md` — split.** Adopt its `BLAST RADIUS`, `FAIL MODE`, `DRIVER` and `NON-RESPONSIBILITIES` fields to replace the proposed values across all 61 component READMEs. Treat its `DONE GATE` entries as **the target definition, not a gate that fails today.**
+
+The mapping pass is real work — 54 rebuild components onto 61 running ones, overlapping but not identical lists, needing judgment rather than mechanical matching. Roughly a day. It closes design log §29's open item on blast radius and fail mode.
+
+The repository copies are now canonical; the Desktop copies are a backup.
+
+Logged as Track C task C13.
 
 ---
 
@@ -323,10 +376,14 @@ exist in exactly one place, on one laptop, outside version control.
 
 | # | Question | Status | Blocks |
 |---|---|---|---|
-| 0.1 | memory credential | **open** — recommendation A | all of Phase 2 |
-| 0.2 | recovery contract | closed — `TaskSkeleton` | — |
-| 0.3 | auto-creation tier | **open** — recommendation A now, C later | Phase 3 |
-| 0.4 | requirements map | **open** — recommendation B | latent |
-| 0.5 | action vocabulary | closed — engine's enum | — |
-| 0.6 | Voice / Repository Manager | **open** — recommendation: cut both, explicitly | Phase 5 scope |
-| 0.7 | architecture documents | **open** — recommendation A | how much of the standards set applies |
+| 0.1 | memory credential | **closed** — explicit tenant + service credential, loud refusal on mismatch, audited | design log §30 |
+| 0.2 | recovery contract | **closed** — `TaskSkeleton` canonical | design log §24 |
+| 0.3 | auto-creation tier | **closed** — never create a doomed agent; ceiling is config; idempotency pulled out | design log §31 |
+| 0.4 | requirements map | **closed** — copy the caller's map; residual pattern-4 risk recorded | design log §32 |
+| 0.5 | action vocabulary | **closed** — engine's enum canonical | design log §22 |
+| 0.6 | Voice / Repository Manager | **closed** — both cut, declarations removed | design log §33 |
+| 0.7 | architecture documents | **closed** — imported; 3 binding, contracts split | Track C13 |
+
+**Phase 0 is complete.** Every question has a written answer with its rationale. No code has
+changed. Each answer was drafted, attacked, and regenerated — three of the five changed
+materially under that attack, and the changes are described inside each answer.

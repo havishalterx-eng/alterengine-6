@@ -169,6 +169,21 @@ never the reverse.
 
 **Status.** Decided. Not yet implemented.
 
+### 2026-09-08 — Phase 0 closed: all five decisions answered
+
+Full reasoning, options and the code evidence behind each: [`phase-0-decisions.md`](phase-0-decisions.md). Derived logic appended to the design log as §30–§33. Each answer was drafted, attacked, and regenerated; three of the five changed materially under that attack.
+
+**0.1 memory credential — internal endpoints accept an explicit tenant alongside a service credential.** Plus two things the first draft missed: a mismatch refuses explicitly with a named reason rather than degrading to "not found", and every service-asserted tenant is audited. **Why the additions:** the first draft made §2 tenant isolation depend on a shared secret every service holds, and did not say so. Design log **§30**.
+
+**0.3 auto-creation — never create an agent that cannot satisfy the requirement that triggered it.** When the requested tier exceeds policy, fail the bind with a named reason. The ceiling is a config value defaulting to `STANDARD`, to be lifted deliberately once Run Manager's budget gate exists. **Idempotency is pulled out of Phase 0 entirely** and fixed immediately — it is not a policy decision and it is corrupting tenant data now. **Why the reframe:** the first draft treated a correctness defect as a cost question. Design log **§31**.
+
+**0.4 requirements map — the architecture path copies the map the caller already supplied.** Verified nearly free: the data is present at the call site and simply not persisted. **Recorded residual:** this leaves two sources for one fact — the stored map and the fresh run-time resolution — which is §7 pattern 4 arrived at from the other direction. Resolving it touches the frozen Executor, so it is deferred as Track C, not closed. Design log **§32**.
+
+**0.6 Voice and Repository Manager — both cut from v1, declarations removed.** Confirmed with Havish that Axon is a separate product and does not run on this engine, which was the question the first draft failed to ask before recommending. Deployment Manager is *not* cut — its backend contract is real. Design log **§33**.
+
+**0.7 architecture documents — imported, then split three ways.** All five now live in `architecture/`; they previously existed only on one laptop with no backup. `layers.md`, `planes.md` and `whole.md` are binding now. `component-contracts.md` contributes its blast radius, fail mode, driver and non-responsibilities fields to the component READMEs, but its done gates are **targets, not gates that fail today**. **Why the split:** calling all 54 contracts "binding" would have manufactured 54 blockers on day one, several against Category 1 components we have promised not to touch.
+
+**Decided by.** Havish, after asking for each recommendation to be attacked and regenerated before approval.
 ---
 
 ## 3. Checklist context
