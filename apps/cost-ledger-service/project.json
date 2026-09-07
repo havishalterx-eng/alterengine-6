@@ -1,0 +1,74 @@
+{
+  "name": "cost-ledger-service",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/cost-ledger-service/src",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "{workspaceRoot}/dist/apps/cost-ledger-service"
+      ],
+      "options": {
+        "commands": [
+          "tsc -p apps/cost-ledger-service/tsconfig.app.json",
+          "node apps/cost-ledger-service/scripts/copy-build-assets.mjs"
+        ],
+        "parallel": false
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "build"
+      ],
+      "options": {
+        "command": "node dist/apps/cost-ledger-service/main.js"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "options": {
+        "eslintConfig": "apps/cost-ledger-service/eslint.config.mjs",
+        "lintFilePatterns": [
+          "apps/cost-ledger-service/src/**/*.ts",
+          "apps/cost-ledger-service/db/schema/**/*.ts"
+        ]
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "tsc --noEmit -p apps/cost-ledger-service/tsconfig.json",
+          "tsc --noEmit -p apps/cost-ledger-service/db/tsconfig.json"
+        ],
+        "parallel": false
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "^build"
+      ],
+      "options": {
+        "command": "vitest run --config apps/cost-ledger-service/vitest.config.ts"
+      }
+    },
+    "coverage": {
+      "executor": "nx:run-commands",
+      "outputs": [
+        "{projectRoot}/coverage"
+      ],
+      "options": {
+        "command": "vitest run --coverage --config apps/cost-ledger-service/vitest.config.ts"
+      }
+    }
+  },
+  "tags": [
+    "type:service"
+  ]
+}

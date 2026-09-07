@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package alter.audit.v1;
+
+service AuditService {
+  rpc RecordEvent(RecordEventRequest) returns (RecordEventResponse);
+  // Real, tenant-scoped read. A caller can only ever read an event
+  // recorded under their own tenant_id; NOT_FOUND is returned both for
+  // an event that never existed and for one that exists under a
+  // different tenant -- the two are deliberately indistinguishable from
+  // outside, same as every other real cross-tenant lookup in this system.
+  rpc GetEvent(GetEventRequest) returns (GetEventResponse);
+}
+
+message RecordEventRequest {
+  // Platform bare UUID or Engine ten_ prefixed UUIDv7; empty for system events.
+  string tenant_id = 1;
+  string actor_type = 2; // user | service | admin | support | system
+  string actor_ref = 3;
+  string action = 4; // For example: trigger.enable or policy.promote.
+  string target_type = 5;
+  string target_ref = 6;
+  string result = 7; // success | denied | error
+  string reason_code = 8; // Required for support or break-glass access; otherwise empty.
+  string context_json = 9; // Request ID, IP class, and scope only; never content, prompts, or files.
+  string occurred_at = 10; // ISO 8601 timestamp.
+}
+
+message RecordEventResponse {
+  string id = 1; // aud_ prefixed UUIDv7
+  string entry_hash = 2; // Hex-encoded SHA-256 digest.
+}
+
+message GetEventRequest {
+  // Caller's own Platform bare UUID or Engine ten_ prefixed UUIDv7.
+  string tenant_id = 1;
+  string event_id = 2; // aud_ prefixed UUIDv7.
+}
+
+message GetEventResponse {
+  string id = 1; // aud_ prefixed UUIDv7
+  string actor_type = 2;
+  string actor_ref = 3;
+  string action = 4;
+  string target_type = 5;
+  string target_ref = 6;
+  string result = 7;
+  string reason_code = 8;
+  string context_json = 9;
+  string occurred_at = 10; // ISO 8601 timestamp.
+  string entry_hash = 11; // Hex-encoded SHA-256 digest.
+}

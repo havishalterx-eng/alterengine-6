@@ -1,0 +1,99 @@
+{
+  "name": "contracts",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "packages/contracts/src",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "proto-types"
+      ],
+      "outputs": [
+        "{projectRoot}/dist"
+      ],
+      "options": {
+        "command": "tsc -p packages/contracts/tsconfig.lib.json"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "options": {
+        "eslintConfig": "packages/contracts/eslint.config.mjs",
+        "lintFilePatterns": [
+          "packages/contracts/src/**/*.ts",
+          "packages/contracts/orchestration/**/*.ts",
+          "packages/contracts/auth/**/*.ts"
+        ]
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p packages/contracts/tsconfig.json"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "build"
+      ],
+      "options": {
+        "command": "vitest run packages/contracts/src"
+      }
+    },
+    "proto": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "buf lint",
+          "buf build",
+          "buf generate --template buf.gen.yaml --path alter/provisioning/v1/provisioning.proto --path alter/artifacts/v1/artifacts.proto --path alter/audit/v1/audit.proto --path alter/modelgw/v1/modelgw.proto --path alter/toolgw/v1/toolgw.proto --path alter/conversation/v1/conversation.proto --path alter/compiler/v1/compiler.proto --path alter/deployctl/v1/deployctl.proto --path alter/planner/v1/planner.proto --path alter/verify/v1/verify.proto --path alter/recovery/v1/recovery.proto --path alter/cost/v1/cost.proto --path alter/runs/v1/runs.proto --path alter/voice/v1/voice.proto --path alter/eval/v1/eval.proto"
+        ],
+        "cwd": "packages/contracts/proto",
+        "parallel": false
+      }
+    },
+    "proto-types": {
+      "executor": "nx:run-commands",
+      "outputs": [
+        "{projectRoot}/src/generated/alter/provisioning/v1/provisioning.ts",
+        "{projectRoot}/src/generated/alter/artifacts/v1/artifacts.ts",
+        "{projectRoot}/src/generated/alter/audit/v1/audit.ts",
+        "{projectRoot}/src/generated/alter/modelgw/v1/modelgw.ts",
+        "{projectRoot}/src/generated/alter/toolgw/v1/toolgw.ts",
+        "{projectRoot}/src/generated/alter/conversation/v1/conversation.ts",
+        "{projectRoot}/src/generated/alter/compiler/v1/compiler.ts",
+        "{projectRoot}/src/generated/alter/deployctl/v1/deployctl.ts",
+        "{projectRoot}/src/generated/alter/planner/v1/planner.ts",
+        "{projectRoot}/src/generated/alter/registry/v1/registry.ts",
+        "{projectRoot}/src/generated/alter/nodeexec/v1/nodeexec.ts",
+        "{projectRoot}/src/generated/alter/blackboard/v1/blackboard.ts",
+        "{projectRoot}/src/generated/alter/sandbox/v1/sandbox.ts",
+        "{projectRoot}/src/generated/alter/verify/v1/verify.ts",
+        "{projectRoot}/src/generated/alter/recovery/v1/recovery.ts",
+        "{projectRoot}/src/generated/alter/cost/v1/cost.ts",
+        "{projectRoot}/src/generated/alter/runs/v1/runs.ts",
+        "{projectRoot}/src/generated/alter/voice/v1/voice.ts",
+        "{projectRoot}/src/generated/alter/eval/v1/eval.ts"
+      ],
+      "options": {
+        "command": "buf generate --template buf.gen.yaml --path alter/provisioning/v1/provisioning.proto --path alter/artifacts/v1/artifacts.proto --path alter/audit/v1/audit.proto --path alter/modelgw/v1/modelgw.proto --path alter/toolgw/v1/toolgw.proto --path alter/conversation/v1/conversation.proto --path alter/compiler/v1/compiler.proto --path alter/deployctl/v1/deployctl.proto --path alter/planner/v1/planner.proto --path alter/registry/v1/registry.proto --path alter/nodeexec/v1/nodeexec.proto --path alter/blackboard/v1/blackboard.proto --path alter/sandbox/v1/sandbox.proto --path alter/verify/v1/verify.proto --path alter/recovery/v1/recovery.proto --path alter/cost/v1/cost.proto --path alter/runs/v1/runs.proto --path alter/voice/v1/voice.proto --path alter/eval/v1/eval.proto",
+        "cwd": "packages/contracts/proto"
+      }
+    },
+    "generate": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "build"
+      ],
+      "outputs": [
+        "{workspaceRoot}/packages/contracts/openapi.json"
+      ],
+      "options": {
+        "command": "node packages/contracts/scripts/generate-openapi.mjs"
+      }
+    }
+  },
+  "tags": []
+}

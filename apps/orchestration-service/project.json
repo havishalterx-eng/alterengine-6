@@ -1,0 +1,72 @@
+{
+  "name": "orchestration-service",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/orchestration-service/src",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "{workspaceRoot}/dist/apps/orchestration-service"
+      ],
+      "options": {
+        "commands": [
+          "tsc -p apps/orchestration-service/tsconfig.app.json",
+          "node apps/orchestration-service/scripts/copy-build-assets.mjs"
+        ],
+        "parallel": false
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "build"
+      ],
+      "options": {
+        "command": "node -r ./dist/apps/orchestration-service/tracing.js dist/apps/orchestration-service/main.js"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "options": {
+        "eslintConfig": "apps/orchestration-service/eslint.config.mjs",
+        "lintFilePatterns": [
+          "apps/orchestration-service/src/**/*.ts",
+          "apps/orchestration-service/db/schema/**/*.ts"
+        ]
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "tsc --noEmit -p apps/orchestration-service/tsconfig.json",
+          "tsc --noEmit -p apps/orchestration-service/db/tsconfig.json"
+        ],
+        "parallel": false
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "^build",
+        {
+          "target": "build",
+          "projects": [
+            "tool-gateway"
+          ]
+        }
+      ],
+      "options": {
+        "command": "vitest run apps/orchestration-service/src/*.spec.ts apps/orchestration-service/src/**/*.spec.ts"
+      }
+    }
+  },
+  "tags": [
+    "type:service",
+    "security-critical"
+  ]
+}

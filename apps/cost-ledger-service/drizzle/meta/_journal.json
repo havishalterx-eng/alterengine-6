@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1785561000000,
+      "tag": "0000_create_cost_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785561001000,
+      "tag": "0001_create_billing_rollups",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785561002000,
+      "tag": "0002_billing_rollup_currency",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785561003000,
+      "tag": "0003_create_model_pricing",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785561004000,
+      "tag": "0004_create_model_outcomes",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785561005000,
+      "tag": "0005_fx_rate_and_usd_amount",
+      "breakpoints": true
+    }
+  ]
+}

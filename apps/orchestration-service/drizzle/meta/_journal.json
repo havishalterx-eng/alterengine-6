@@ -1,0 +1,258 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1784861000000,
+      "tag": "0000_create_workflows",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784861001000,
+      "tag": "0001_create_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784861002000,
+      "tag": "0002_create_trigger_versions",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784861003000,
+      "tag": "0003_create_conversations",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784861004000,
+      "tag": "0004_create_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784861005000,
+      "tag": "0005_create_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784861006000,
+      "tag": "0006_create_conversation_goal_states",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784861007000,
+      "tag": "0007_create_workflow_versions",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784861008000,
+      "tag": "0008_add_workflow_version_canary_traffic",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784861009000,
+      "tag": "0009_create_blackboard_checkpoints",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784861010000,
+      "tag": "0010_create_node_executions",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784861011000,
+      "tag": "0011_create_run_stream_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1784861012000,
+      "tag": "0012_add_run_workflow_version",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1784861013000,
+      "tag": "0013_create_verification_results",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1784861014000,
+      "tag": "0014_create_recovery_actions",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1784861015000,
+      "tag": "0015_create_run_outcomes",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1784861016000,
+      "tag": "0016_create_approvals",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1784861017000,
+      "tag": "0017_allow_pending_recovery_policy",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1784861018000,
+      "tag": "0018_add_blocked_pending_recovery_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1784861019000,
+      "tag": "0019_create_projects",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1784861020000,
+      "tag": "0020_create_artifacts",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1784861021000,
+      "tag": "0021_create_whatsapp_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1784861022000,
+      "tag": "0022_add_project_run_provisioning",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1784861023000,
+      "tag": "0023_add_deployment_artifact_seam",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1784861024000,
+      "tag": "0024_create_template_variables_clarifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1784861025000,
+      "tag": "0025_create_trigger_integration_bindings",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1784861026000,
+      "tag": "0026_create_escalations",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1784861027000,
+      "tag": "0027_create_trigger_webhook_secrets",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1784861028000,
+      "tag": "0028_create_project_plans",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1784861029000,
+      "tag": "0029_add_deployment_suspended_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1784861030000,
+      "tag": "0030_add_workflow_paused_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1784861031000,
+      "tag": "0031_add_workflow_draft_dag",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1784861032000,
+      "tag": "0032_add_run_triggering_event",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1784861033000,
+      "tag": "0033_add_run_deadline",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1786904000000,
+      "tag": "0034_create_run_dispatch_queue",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1786904001000,
+      "tag": "0035_add_workflow_version_test_gate",
+      "breakpoints": true
+    }
+  ]
+}

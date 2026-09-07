@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package alter.nodeexec.v1;
+
+// The Node Execution Service dispatches one CompiledDag node to its
+// registered handler (see apps/orchestration-service/src/registry) and
+// returns the result. This is the ONLY entry point the Executor's Temporal
+// Activity calls -- all handler dispatch logic stays server-side.
+service NodeExecutionService {
+  rpc ExecuteNode(ExecuteNodeRequest) returns (ExecuteNodeResponse);
+  // Called once by the Executor workflow's try/finally, after every wave
+  // completes or the workflow fails -- the only durable write of the run's
+  // terminal (or resumed-running) status. EXEC-14.
+  rpc FinalizeRun(FinalizeRunRequest) returns (FinalizeRunResponse);
+  // Called once by the Executor workflow after a durably-awaited
+  // HumanApproval decision (approved/rejected/expired) arrives -- the only
+  // durable write of that node_execution's terminal status. A pending
+  // HumanApproval node's ExecuteNode call does NOT call this; it leaves
+  // the node_execution row in 'running' until this RPC resolves it. HEAL-7.
+  rpc FinalizeApprovalNode(FinalizeApprovalNodeRequest) returns (FinalizeApprovalNodeResponse);
+}
+
+message ExecuteNodeRequest {
+  reserved 100 to 199;
+
+  string tenant_id = 1; // ten_ prefixed UUIDv7
+  string run_id = 2; // run_ prefixed UUIDv7
+  string node_execution_id = 3; // node_ prefixed UUIDv7
+  string node_key = 4;
+  string node_type = 5; // one of the 11 alter.registry.v1 node types
+  string config_json = 6;
+  string inputs_json = 7; // upstream outputs, keyed by producing node key
+}
+
+message ExecuteNodeResponse {
+  reserved 100 to 199;
+
+  string output_json = 1;
+  string metadata_json = 2;
+}
+
+message FinalizeRunRequest {
+  reserved 100 to 199;
+
+  string tenant_id = 1; // ten_ prefixed UUIDv7
+  string run_id = 2; // run_ prefixed UUIDv7
+  string status = 3; // "completed" or "failed"
+  string error_json = 4; // empty string when status = "completed"
+}
+
+message FinalizeRunResponse {
+  reserved 100 to 199;
+
+  string status = 1;
+  string ended_at = 2;
+}
+
+message FinalizeApprovalNodeRequest {
+  reserved 100 to 199;
+
+  string tenant_id = 1; // ten_ prefixed UUIDv7
+  string run_id = 2; // run_ prefixed UUIDv7
+  string node_execution_id = 3; // node_ prefixed UUIDv7
+  string node_key = 4;
+  string decision = 5; // "approved" or "rejected" (rejected covers expiry too)
+  string decision_output_json = 6; // {"approved": bool, "note": string|null, "expired": bool}
+}
+
+message FinalizeApprovalNodeResponse {
+  reserved 100 to 199;
+
+  string status = 1; // node_executions.status after this write
+}

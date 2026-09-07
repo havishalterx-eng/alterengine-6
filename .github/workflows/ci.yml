@@ -1,0 +1,190 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize]
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: platform_db
+          POSTGRES_USER: platform_api
+          POSTGRES_PASSWORD: platform_api_local
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U platform_api -d platform_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://platform_api:platform_api_local@localhost:5432/platform_db
+      MARKETPLACE_DATABASE_URL: postgres://platform_api:platform_api_local@localhost:5432/platform_db
+      MARKETPLACE_SEARCH_CURSOR_SECRET: ci-marketplace-search-cursor-secret
+      SIGNING_KEY_PROVIDER: mock
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Finding #22: gives `nx affected` a correct NX_BASE/NX_HEAD for both
+      # pull_request and push triggers (handles the PR merge-base and the
+      # push-to-main previous-commit case), so the "full monorepo sweep"
+      # steps below can be replaced with affected-only runs on PRs without
+      # each one having to work out the right base ref itself.
+      - uses: nrwl/nx-set-shas@v4
+
+      - name: cache nx computation cache
+        uses: actions/cache@v4
+        with:
+          path: .nx/cache
+          key: nx-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            nx-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            nx-${{ runner.os }}-
+
+      - name: repository skeleton check
+        run: |
+          test -f README.md
+          test -f .github/CODEOWNERS
+          echo "skeleton ok"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: install ripgrep
+        run: |
+          curl -sSfL https://github.com/BurntSushi/ripgrep/releases/download/14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-musl.tar.gz -o /tmp/ripgrep.tar.gz
+          tar -xzf /tmp/ripgrep.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/ripgrep-14.1.1-x86_64-unknown-linux-musl/rg /usr/local/bin/rg
+          rg --version
+
+      - name: architecture boundary check
+        run: scripts/check-architecture-boundaries.sh
+
+      - name: rbac classification check
+        run: scripts/check-rbac-classification.sh
+
+      - name: placeholder marker check
+        run: scripts/check-placeholder-markers.sh
+
+      - name: migration rollback pairing check
+        run: scripts/check-migration-rollback-pairing.sh
+
+      - name: secret scan
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          /tmp/gitleaks detect --config .gitleaks.toml --source . --redact --verbose
+
+      - name: dependency scan
+        run: |
+          set +e
+          pnpm audit --audit-level high --json > audit-current.json
+          audit_status=$?
+          set -e
+          node -e '
+            const fs = require("fs");
+            const baseline = JSON.parse(fs.readFileSync(".audit-baseline.json", "utf8"));
+            const current = JSON.parse(fs.readFileSync("audit-current.json", "utf8"));
+            const baselineIds = new Set((baseline.advisoryIds || []).map(String));
+            const currentIds = new Set(Object.keys(current.advisories || {}));
+            const newIds = [...currentIds].filter((id) => !baselineIds.has(id)).sort();
+            const removedIds = [...baselineIds].filter((id) => !currentIds.has(id)).sort();
+            if (newIds.length > 0) {
+              console.error(`New pnpm audit advisories detected: ${newIds.join(", ")}`);
+              process.exit(1);
+            }
+            console.log(`pnpm audit baseline ok: ${currentIds.size} advisories match checked-in baseline`);
+            if (removedIds.length > 0) {
+              console.log(`Baseline contains advisories no longer present: ${removedIds.join(", ")}`);
+            }
+          '
+          if [ "$audit_status" -ne 0 ]; then
+            echo "pnpm audit exited nonzero because baseline advisories exist"
+          fi
+
+      # Wave 4 item 5: real SBOM generation, not a stub. syft (via
+      # anchore/sbom-action) reads the checked-in lockfiles directly
+      # (pnpm-lock.yaml, every service's uv.lock/pyproject.toml) -- no
+      # install step needed first. Uploaded as a real build artifact on
+      # every run so the dependency composition is always auditable, not
+      # regenerated by hand when someone happens to ask for it.
+      - name: generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: sbom.cyclonedx.json
+          upload-artifact: true
+          upload-release-assets: false
+
+      # Without a token this action resolves its release through unauthenticated
+      # GitHub API calls, which are rate limited per runner IP. Shared runners
+      # exhaust that budget regularly, producing a failure that has nothing to do
+      # with the change under test and that a rerun alone fixes. Supplying the
+      # workflow token raises the limit and removes the flake at its source.
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: contract breaking-change check
+        run: buf breaking packages/contracts/proto --against '.git#branch=origin/main,subdir=packages/contracts/proto'
+
+      - name: install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Finding #22: PRs only build/lint/typecheck/test what the diff
+      # actually touches (plus dependents) via `nx affected`. Pushes to
+      # main (and manual workflow_dispatch runs) keep the full sweep as a
+      # safety net -- main pushes are far less frequent than PR pushes, and
+      # affected's graph-diff computation can in principle miss a
+      # cross-project edge case, so the branch that actually lands on main
+      # still gets the exhaustive check.
+      - name: full monorepo sweep
+        if: github.event_name != 'pull_request'
+        run: pnpm exec nx run-many -t lint,typecheck,build --all --parallel=2
+
+      - name: affected monorepo sweep
+        if: github.event_name == 'pull_request'
+        run: pnpm exec nx affected -t lint,typecheck,build --parallel=2
+
+      # platform-api:test needs a migrated DATABASE_URL (real Postgres-backed
+      # specs, e.g. entitlement/credential guards) -- excluded here so it
+      # only runs once, correctly, after "migrate platform db" below. Every
+      # other project's tests don't need that, so they run right away.
+      - name: test monorepo (excluding platform-api)
+        if: github.event_name != 'pull_request'
+        run: pnpm exec nx run-many -t test --all --exclude=platform-api --parallel=2
+
+      - name: affected test monorepo (excluding platform-api)
+        if: github.event_name == 'pull_request'
+        run: pnpm exec nx affected -t test --exclude=platform-api --parallel=2
+
+      - name: migrate platform db
+        run: pnpm --filter @alterx/platform-api db:migrate
+
+      - name: test platform api
+        run: pnpm exec nx test platform-api
+
+      - name: test platform api database integration
+        run: pnpm exec nx test-db-integration platform-api
+
+      - name: test platform api rbac integration
+        run: pnpm exec vitest run tests/integration/rbac/rbac.integration.spec.ts

@@ -1,0 +1,261 @@
+import { lookup as dnsLookup } from "node:dns/promises";
+import { request as httpRequest, type RequestOptions } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { Readable } from "node:stream";
+
+import {
+  assertHostnameNotLiteralBlockedIp,
+  assertResolvedAddressesNotBlocked,
+  assertUrlSchemeAllowed,
+  type SsrfGuardPolicy,
+} from "./ssrf-guard";
+
+export interface ResolvedAddress {
+  readonly address: string;
+  readonly family: 4 | 6;
+}
+
+export type DnsResolver = (hostname: string) => Promise<readonly ResolvedAddress[]>;
+
+export interface FetchRequestInit {
+  readonly method: string;
+  readonly redirect: "manual";
+  readonly signal: AbortSignal;
+  readonly lookup: NonNullable<RequestOptions["lookup"]>;
+}
+
+export interface FetchResponse {
+  readonly status: number;
+  readonly headers: { get(name: string): string | null };
+  readonly body: {
+    getReader(): {
+      read(): Promise<{
+        readonly done: boolean;
+        readonly value: Uint8Array | undefined;
+      }>;
+      cancel?(): Promise<void>;
+    };
+  } | null | undefined;
+  arrayBuffer(): Promise<ArrayBuffer>;
+}
+
+export type FetchFn = (
+  url: string,
+  init: FetchRequestInit,
+) => Promise<FetchResponse>;
+
+export interface SsrfGuardedFetcherConfig {
+  readonly maxRedirects?: number;
+  readonly maxResponseBytes?: number;
+  readonly timeoutMs?: number;
+  readonly policy?: SsrfGuardPolicy;
+}
+
+export interface SsrfGuardedFetchResult {
+  readonly statusCode: number;
+  readonly body: ArrayBuffer;
+  readonly finalUrl: string;
+}
+
+const DEFAULT_MAX_REDIRECTS = 3;
+const DEFAULT_TIMEOUT_MS = 10_000;
+// A safety limit defaulting to "unlimited" is backwards -- the safe value
+// should be the one a caller gets for free. Sandbox already passes this
+// exact value explicitly; Tool Gateway's two construction sites
+// (main.ts, eval_credential_grpc_server.ts) pass no config at all and used
+// to inherit Number.MAX_SAFE_INTEGER, buffering an unbounded response
+// (twice: chunk array + concatenated buffer) until the request's own
+// timeout -- an OOM reachable by any tenant that can run a workflow.
+const DEFAULT_MAX_RESPONSE_BYTES = 1_048_576;
+
+async function defaultDnsResolver(hostname: string): Promise<readonly ResolvedAddress[]> {
+  const results = await dnsLookup(hostname, { all: true, verbatim: true });
+  return results.map((entry) => ({
+    address: entry.address,
+    family: entry.family === 6 ? 6 : 4,
+  }));
+}
+
+function defaultFetchFn(): FetchFn {
+  return (rawUrl, init) => {
+    const url = new URL(rawUrl);
+    return new Promise((resolve, reject) => {
+      const request = url.protocol === "https:"
+        ? httpsRequest(url, {
+            method: init.method,
+            headers: { host: url.host },
+            lookup: init.lookup,
+          }, onResponse)
+        : httpRequest(url, {
+            method: init.method,
+            headers: { host: url.host },
+            lookup: init.lookup,
+          }, onResponse);
+
+      function onResponse(response: import("node:http").IncomingMessage): void {
+        init.signal.removeEventListener("abort", abort);
+        resolve({
+          status: response.statusCode ?? 0,
+          headers: {
+            get(name: string): string | null {
+              const value = response.headers[name.toLowerCase()];
+              if (value === undefined) return null;
+              return Array.isArray(value) ? value.join(", ") : value;
+            },
+          },
+          body: Readable.toWeb(response) as FetchResponse["body"],
+          arrayBuffer: async () => {
+            const chunks: Buffer[] = [];
+            for await (const chunk of response) {
+              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+            }
+            return Buffer.concat(chunks).buffer;
+          },
+        });
+      }
+
+      function abort(): void {
+        request.destroy(new Error("URL fetch timed out"));
+      }
+
+      request.once("error", (error) => {
+        init.signal.removeEventListener("abort", abort);
+        reject(error);
+      });
+      if (init.signal.aborted) {
+        abort();
+      } else {
+        init.signal.addEventListener("abort", abort, { once: true });
+        request.end();
+      }
+    });
+  };
+}
+
+function pinnedLookup(address: ResolvedAddress): NonNullable<RequestOptions["lookup"]> {
+  return (_hostname, _options, callback) => {
+    callback(null, address.address, address.family);
+  };
+}
+
+export class SsrfGuardedFetcher {
+  readonly #maxRedirects: number;
+  readonly #timeoutMs: number;
+  readonly #maxResponseBytes: number;
+  readonly #policy: SsrfGuardPolicy;
+  readonly #resolveDns: DnsResolver;
+  readonly #fetchFn: FetchFn;
+
+  constructor(
+    config: SsrfGuardedFetcherConfig = {},
+    resolveDns?: DnsResolver,
+    fetchFn?: FetchFn,
+  ) {
+    this.#maxRedirects = config.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
+    this.#timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.#maxResponseBytes =
+      config.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
+    if (
+      !Number.isSafeInteger(this.#maxResponseBytes) ||
+      this.#maxResponseBytes < 1
+    ) {
+      throw new Error("URL fetch maxResponseBytes must be a positive integer");
+    }
+    this.#policy = config.policy ?? {};
+    this.#resolveDns = resolveDns ?? defaultDnsResolver;
+    this.#fetchFn = fetchFn ?? defaultFetchFn();
+  }
+
+  async fetch(rawUrl: string): Promise<SsrfGuardedFetchResult> {
+    let currentUrl = rawUrl;
+    for (let hop = 0; hop <= this.#maxRedirects; hop += 1) {
+      const addresses = await this.#resolveAllowed(currentUrl);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.#timeoutMs);
+      try {
+        const response = await this.#fetchFn(currentUrl, {
+          method: "GET",
+          redirect: "manual",
+          signal: controller.signal,
+          lookup: pinnedLookup(addresses[0]!),
+        });
+        if (response.status >= 300 && response.status < 400) {
+          const location = response.headers.get("location");
+          if (location === null || location.length === 0) {
+            throw new Error(
+              `Redirect response ${response.status} from ${currentUrl} carried no Location header`,
+            );
+          }
+          currentUrl = new URL(location, currentUrl).toString();
+          continue;
+        }
+
+        const body = await readBoundedBody(response, this.#maxResponseBytes);
+        return { statusCode: response.status, body, finalUrl: currentUrl };
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+    throw new Error(
+      `URL fetch exceeded the maximum of ${this.#maxRedirects} redirects`,
+    );
+  }
+
+  async assertAllowed(rawUrl: string): Promise<void> {
+    await this.#resolveAllowed(rawUrl);
+  }
+
+  async #resolveAllowed(rawUrl: string): Promise<readonly ResolvedAddress[]> {
+    const url = new URL(rawUrl);
+    assertUrlSchemeAllowed(url, this.#policy);
+    assertHostnameNotLiteralBlockedIp(url.hostname);
+    const addresses = await this.#resolveDns(url.hostname);
+    if (addresses.length === 0) {
+      throw new Error(`URL host ${url.hostname} did not resolve to any address`);
+    }
+    assertResolvedAddressesNotBlocked(addresses);
+    return addresses;
+  }
+}
+
+async function readBoundedBody(
+  response: Awaited<ReturnType<FetchFn>>,
+  maxResponseBytes: number,
+): Promise<ArrayBuffer> {
+  const contentLength = response.headers.get("content-length");
+  if (contentLength !== null) {
+    const declaredBytes = Number(contentLength);
+    if (Number.isFinite(declaredBytes) && declaredBytes > maxResponseBytes) {
+      throw new Error("URL fetch response exceeds configured byte limit");
+    }
+  }
+  const reader = response.body?.getReader();
+  if (reader === undefined) {
+    const body = await response.arrayBuffer();
+    if (body.byteLength > maxResponseBytes) {
+      throw new Error("URL fetch response exceeds configured byte limit");
+    }
+    return body;
+  }
+
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value === undefined) continue;
+    totalBytes += value.byteLength;
+    if (totalBytes > maxResponseBytes) {
+      await reader.cancel?.();
+      throw new Error("URL fetch response exceeds configured byte limit");
+    }
+    chunks.push(value);
+  }
+  const combined = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return combined.buffer;
+}

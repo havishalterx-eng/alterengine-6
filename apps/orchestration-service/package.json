@@ -1,0 +1,31 @@
+{
+  "name": "@alterx/orchestration-service",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "db:migrate": "drizzle-kit migrate --config drizzle.config.ts"
+  },
+  "dependencies": {
+    "@alterx/adapters": "workspace:*",
+    "@alterx/auth": "workspace:*",
+    "@alterx/contracts": "workspace:*",
+    "@alterx/shared-clients": "workspace:*",
+    "@nestjs/common": "11.1.28",
+    "@nestjs/core": "11.1.28",
+    "@nestjs/platform-fastify": "11.1.28",
+    "@opentelemetry/auto-instrumentations-node": "^0.79.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.221.0",
+    "@opentelemetry/resources": "^2.10.0",
+    "@opentelemetry/sdk-node": "0.221.0",
+    "cron-parser": "5.6.2",
+    "fastify": "5.12.1",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "yaml": "2.9.0",
+    "zod": "4.1.12"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "12.0.4",
+    "@testcontainers/redis": "12.0.4"
+  }
+}

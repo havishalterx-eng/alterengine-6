@@ -1,0 +1,93 @@
+"""Generate the Python gRPC bindings consumed by eval-service.
+
+Mirrors apps/verification-service/scripts/generate_protos.py exactly --
+same tool, same check-mode contract. verify.proto is HARD-7a's real
+ScoreNodeInline client; adsq.proto is HARD-7c's real retrieval client;
+conversation.proto is HARD-7e's real ClassifyIntent client;
+toolgw.proto is HARD-7g's real ResolveCredential client;
+recovery.proto is HARD-7i's real SelectStrategy client; modelgw.proto is
+the tenant-isolation follow-up's real model_gateway_cache client
+(model_cache_client.py's real InvokeRequest/InvokeResponse -- the
+cache_hit field this case depends on); audit.proto is the
+audit_event_read follow-up's real GetEvent client (audit_client.py).
+"""
+
+from __future__ import annotations
+
+import argparse
+import filecmp
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+SERVICE_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = SERVICE_ROOT.parents[1]
+PROTO_ROOT = REPO_ROOT / "packages" / "contracts" / "proto"
+PROTO_FILES = (
+    "alter/verify/v1/verify.proto",
+    "alter/adsq/v1/adsq.proto",
+    "alter/conversation/v1/conversation.proto",
+    "alter/toolgw/v1/toolgw.proto",
+    "alter/recovery/v1/recovery.proto",
+    "alter/modelgw/v1/modelgw.proto",
+    "alter/audit/v1/audit.proto",
+    "alter/eval/v1/eval.proto",
+)
+
+
+def generate(output: Path) -> None:
+    command = [
+        sys.executable,
+        "-m",
+        "grpc_tools.protoc",
+        f"-I{PROTO_ROOT}",
+        f"--python_out={output}",
+        f"--pyi_out={output}",
+        f"--grpc_python_out={output}",
+        *(str(PROTO_ROOT / path) for path in PROTO_FILES),
+    ]
+    subprocess.run(command, check=True)
+
+
+def generated_files(root: Path) -> dict[str, Path]:
+    return {
+        str(path.relative_to(root)): path
+        for path in root.glob("alter/**/*.py*")
+        if path.is_file() and "_pb2" in path.name and path.suffix in {".py", ".pyi"}
+    }
+
+
+def check() -> int:
+    with tempfile.TemporaryDirectory(prefix="alterx-eval-proto-") as directory:
+        generated_root = Path(directory)
+        generate(generated_root)
+        expected = generated_files(generated_root)
+        actual = generated_files(SERVICE_ROOT)
+        mismatches = [
+            relative
+            for relative, expected_path in expected.items()
+            if relative not in actual
+            or not filecmp.cmp(expected_path, actual[relative], shallow=False)
+        ]
+        extras = sorted(set(actual) - set(expected))
+        if mismatches or extras:
+            print("Python protobuf bindings are stale; run scripts/generate_protos.py")
+            for relative in sorted(mismatches + extras):
+                print(f"  {relative}")
+            return 1
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--check", action="store_true")
+    args = parser.parse_args()
+    if args.check:
+        return check()
+    generate(SERVICE_ROOT)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

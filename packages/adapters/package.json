@@ -1,0 +1,76 @@
+{
+  "name": "@alterx/adapters",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./observability": {
+      "types": "./dist/observability/index.d.ts",
+      "default": "./dist/observability/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "dependencies": {
+    "@alterx/contracts": "workspace:*",
+    "@alterx/shared-clients": "workspace:*",
+    "@anthropic-ai/sdk": "^0.114.0",
+    "@aws-sdk/client-appconfigdata": "3.1094.0",
+    "@aws-sdk/client-bedrock-agentcore": "3.1094.0",
+    "@aws-sdk/client-bedrock-runtime": "3.1094.0",
+    "@aws-sdk/client-eventbridge": "3.1095.0",
+    "@aws-sdk/client-polly": "3.1094.0",
+    "@aws-sdk/client-s3": "3.1094.0",
+    "@aws-sdk/client-secrets-manager": "3.1094.0",
+    "@aws-sdk/client-sesv2": "3.1094.0",
+    "@aws-sdk/client-transcribe": "3.1094.0",
+    "@aws-sdk/client-sqs": "^3.1095.0",
+    "@aws-sdk/client-ssm": "3.1094.0",
+    "@aws-sdk/rds-signer": "3.1094.0",
+    "@aws-sdk/s3-request-presigner": "3.1094.0",
+    "@browserbasehq/sdk": "2.16.0",
+    "@grpc/grpc-js": "1.14.4",
+    "@grpc/proto-loader": "0.8.1",
+    "@nestjs/common": "11.1.28",
+    "@nestjs/core": "11.1.28",
+    "@nestjs/microservices": "11.1.28",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/api-logs": "0.221.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.79.0",
+    "@opentelemetry/exporter-logs-otlp-http": "0.221.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "0.221.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "0.221.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.221.0",
+    "@opentelemetry/resources": "^2.10.0",
+    "@opentelemetry/sdk-logs": "0.221.0",
+    "@opentelemetry/sdk-metrics": "2.10.0",
+    "@opentelemetry/sdk-node": "0.221.0",
+    "@sentry/node": "10.67.0",
+    "@temporalio/client": "1.20.3",
+    "@temporalio/worker": "1.20.3",
+    "@temporalio/workflow": "1.20.3",
+    "drizzle-orm": "0.45.2",
+    "e2b": "2.31.0",
+    "ioredis": "5.11.1",
+    "openai": "^6.49.0",
+    "pg": "8.22.0",
+    "playwright-core": "1.62.0",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2"
+  },
+  "devDependencies": {
+    "@nestjs/platform-fastify": "11.1.28",
+    "@temporalio/testing": "1.20.3",
+    "@testcontainers/postgresql": "12.0.4",
+    "@types/pg": "8.20.0",
+    "@vitest/coverage-v8": "4.1.10",
+    "fastify": "5.12.1"
+  }
+}

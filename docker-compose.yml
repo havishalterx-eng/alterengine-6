@@ -1,0 +1,266 @@
+services:
+  platform-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: platform_db
+      POSTGRES_USER: platform_api
+      POSTGRES_PASSWORD: ${PLATFORM_DB_PASSWORD:?Set PLATFORM_DB_PASSWORD in .env.local}
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U platform_api -d platform_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - platform_db_data:/var/lib/postgresql/data
+
+  engine-db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: engine_admin
+      POSTGRES_PASSWORD: ${ENGINE_DB_ADMIN_PASSWORD:?Set ENGINE_DB_ADMIN_PASSWORD in .env.local}
+      # AUDIT_DB_PASSWORD is the only required one; engine-db-init.sh falls back
+      # to it for every role below. Passing them all through makes the fallback
+      # visible -- previously orchestration, cost and eval silently shared the
+      # audit credential with nothing recording that they did.
+      AUDIT_DB_PASSWORD: ${AUDIT_DB_PASSWORD:?Set AUDIT_DB_PASSWORD in .env.local}
+      INTELLIGENCE_DB_PASSWORD: ${INTELLIGENCE_DB_PASSWORD:?Set INTELLIGENCE_DB_PASSWORD in .env.local}
+      ORCHESTRATION_DB_PASSWORD: ${ORCHESTRATION_DB_PASSWORD:?Set ORCHESTRATION_DB_PASSWORD in .env.local}
+      COST_DB_PASSWORD: ${COST_DB_PASSWORD:-}
+      EVAL_DB_PASSWORD: ${EVAL_DB_PASSWORD:-}
+      MEMORY_DB_PASSWORD: ${MEMORY_DB_PASSWORD:-}
+      POLICY_SYSTEM_WRITER_PASSWORD: ${POLICY_SYSTEM_WRITER_PASSWORD:-}
+      INTELLIGENCE_DRIFT_READER_PASSWORD: ${INTELLIGENCE_DRIFT_READER_PASSWORD:-}
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "PGPASSWORD=\"$${AUDIT_DB_PASSWORD}\" psql -h 127.0.0.1 -U audit_service -d audit_db -v ON_ERROR_STOP=1 -c 'SELECT 1' >/dev/null",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    volumes:
+      - engine_db_data:/var/lib/postgresql/data
+      - ./infrastructure/local/engine-db-init.sh:/docker-entrypoint-initdb.d/10-engine-databases.sh:ro
+
+  # ADS owns this cluster. Do not add ADS tables to engine-db: ADS tenancy and
+  # retention policies are isolated from the Engine service database.
+  ads-db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ads_db
+      POSTGRES_USER: ads_core
+      POSTGRES_PASSWORD: ads_core_local
+      ADS_DELETION_DB_PASSWORD: ads_deletion_local
+    ports:
+      - "127.0.0.1:5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ads_core -d ads_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    volumes:
+      - ads_db_data:/var/lib/postgresql/data
+      - ./infrastructure/local/ads-db-init.sh:/docker-entrypoint-initdb.d/10-ads-roles.sh:ro
+
+  # ENGINE-FIX-PHASE2-N5: cost-ledger-service's own cluster. Its first
+  # migration (0001_create_billing_rollups.sql) does `CREATE ROLE
+  # cost_ledger_provisioner BYPASSRLS`, which needs superuser/CREATEROLE --
+  # nothing previously gave cost-ledger a Postgres instance to run against
+  # locally at all (CI/tests are unaffected: they bootstrap their own
+  # Testcontainers superuser). POSTGRES_USER here becomes that superuser via
+  # the official image's initdb, same as platform-db/ads-db/engine-db.
+  # POSTGRES_USER is literally "cost_ledger_service" because the migration's
+  # own GRANT cost_ledger_provisioner TO cost_ledger_service expects that
+  # role to already exist as the connecting user.
+  cost-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cost_db
+      POSTGRES_USER: cost_ledger_service
+      POSTGRES_PASSWORD: ${COST_DB_PASSWORD:?Set COST_DB_PASSWORD in .env.local}
+    ports:
+      - "127.0.0.1:5435:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cost_ledger_service -d cost_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - cost_db_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7.4.2-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    volumes:
+      - redis_data:/data
+
+  localstack:
+    image: localstack/localstack:4.14.0
+    environment:
+      SERVICES: s3,sqs,secretsmanager,ssm,events
+      AWS_DEFAULT_REGION: ap-south-1
+      EAGER_SERVICE_LOADING: "1"
+      LS_LOG: warn
+      AUDIT_DB_PASSWORD: ${AUDIT_DB_PASSWORD:?Set AUDIT_DB_PASSWORD in .env.local}
+      AUDIT_DB_HOST: 127.0.0.1
+      AUDIT_DB_PORT: "5433"
+      AUDIT_DATABASE_NAME: audit_db
+      AUDIT_DATABASE_USER: audit_service
+      DATABASE_SECRET_REF: ${AUDIT_DATABASE_SECRET_REF:-${DATABASE_SECRET_REF:-/alter/local/audit-service/system/database_credentials}}
+      ACTOR_TOKEN_SIGNING_KEY_REF: ${ACTOR_TOKEN_SIGNING_KEY_REF:-/alter/local/platform-api/system/actor-token-signing-key}
+      COST_DB_PASSWORD: ${COST_DB_PASSWORD:?Set COST_DB_PASSWORD in .env.local}
+      COST_DB_HOST: 127.0.0.1
+      COST_DB_PORT: "5435"
+      COST_DATABASE_NAME: cost_db
+      COST_DATABASE_USER: cost_ledger_service
+      COST_DATABASE_SECRET_REF: ${COST_DATABASE_SECRET_REF:-/alter/local/cost-ledger-service/system/database_credentials}
+      COST_PSEUDONYM_KEY_REF: ${COST_PSEUDONYM_KEY_REF:-/alter/local/cost-ledger-service/system/pseudonym_key}
+      AUDIT_ARCHIVE_BUCKET_PARAM: ${AUDIT_ARCHIVE_BUCKET_PARAM:-/alter/local/audit/archive-bucket}
+      ARTIFACTS_BUCKET_PARAM: ${ARTIFACTS_BUCKET_PARAM:-alter-local-artifacts-bucket}
+      DELETION_SERVICE_TOKEN: ${DELETION_SERVICE_TOKEN:-}
+      DELETION_SERVICE_TOKEN_REF: ${DELETION_SERVICE_TOKEN_REF:-/alter/local/audit-service/system/deletion_service_token}
+      DELETION_PSEUDONYM_KEY_REF: ${DELETION_PSEUDONYM_KEY_REF:-/alter/local/audit-service/system/deletion_pseudonym_key}
+    ports:
+      - "127.0.0.1:4566:4566"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "awslocal sqs get-queue-url --queue-name alter-local-cost-events >/dev/null 2>&1 && awslocal sqs get-queue-url --queue-name alter-local-events.fifo >/dev/null 2>&1 && awslocal secretsmanager describe-secret --secret-id \"$${DATABASE_SECRET_REF}\" >/dev/null 2>&1 && awslocal secretsmanager describe-secret --secret-id \"$${COST_DATABASE_SECRET_REF}\" >/dev/null 2>&1 && awslocal secretsmanager describe-secret --secret-id \"$${DELETION_SERVICE_TOKEN_REF}\" >/dev/null 2>&1 && awslocal secretsmanager describe-secret --secret-id \"$${DELETION_PSEUDONYM_KEY_REF}\" >/dev/null 2>&1 && awslocal secretsmanager describe-secret --secret-id \"$${COST_PSEUDONYM_KEY_REF}\" >/dev/null 2>&1 && awslocal ssm get-parameter --name \"$${AUDIT_ARCHIVE_BUCKET_PARAM}\" >/dev/null 2>&1 && awslocal ssm get-parameter --name \"$${ARTIFACTS_BUCKET_PARAM}\" >/dev/null 2>&1 && awslocal ssm get-parameter --name \"$${ACTOR_TOKEN_SIGNING_KEY_REF}\" --with-decryption >/dev/null 2>&1",
+        ]
+      # Ten assertions at roughly 0.7s each take about 7.4s to run, so the
+      # previous 5s timeout killed the probe before it could finish and
+      # reported exit -1 forever, whatever the state of the resources.
+      interval: 10s
+      timeout: 20s
+      retries: 20
+      start_period: 10s
+    volumes:
+      - ./infrastructure/local/localstack-init:/etc/localstack/init/ready.d:ro
+
+  temporal:
+    image: temporalio/temporal:1.8.1
+    command:
+      [
+        "server",
+        "start-dev",
+        "--ip",
+        "0.0.0.0",
+        "--port",
+        "7233",
+        "--ui-port",
+        "8233",
+        "--ui-disable-news-fetch",
+      ]
+    ports:
+      - "127.0.0.1:7233:7233"
+      - "127.0.0.1:8233:8233"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "temporal",
+          "operator",
+          "cluster",
+          "health",
+          "--address",
+          "127.0.0.1:7233",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  tempo:
+    image: grafana/tempo:2.4.1
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./infrastructure/local/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "127.0.0.1:3200:3200"
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3200/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  grafana:
+    image: grafana/grafana:10.4.1
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    ports:
+      - "127.0.0.1:3300:3000"
+    volumes:
+      - ./infrastructure/local/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+    depends_on:
+      tempo:
+        condition: service_healthy
+
+  presidio-analyzer:
+    image: mcr.microsoft.com/presidio-analyzer:2.2.360
+    ports:
+      - "127.0.0.1:5001:3000"
+    # The Presidio images ship neither wget nor curl, so the usual HTTP probe
+    # can never pass. They are Python images, so probe with the interpreter
+    # that is guaranteed to be present.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=4).status == 200 else 1)",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  presidio-anonymizer:
+    image: mcr.microsoft.com/presidio-anonymizer:2.2.360
+    ports:
+      - "127.0.0.1:5002:3000"
+    # The Presidio images ship neither wget nor curl, so the usual HTTP probe
+    # can never pass. They are Python images, so probe with the interpreter
+    # that is guaranteed to be present.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=4).status == 200 else 1)",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  platform_db_data:
+  engine_db_data:
+  ads_db_data:
+  cost_db_data:
+  redis_data:
+  tempo_data:

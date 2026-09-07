@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package alter.eval.v1;
+
+service EvalService {
+  rpc RunEvaluation(RunEvaluationRequest) returns (RunEvaluationResponse);
+  rpc CheckReleaseGate(CheckReleaseGateRequest) returns (CheckReleaseGateResponse);
+  rpc RecordPromotionDecision(RecordPromotionDecisionRequest) returns (RecordPromotionDecisionResponse);
+}
+
+message RunEvaluationRequest {
+  reserved 100 to 199;
+
+  // Eval runs are global Engine release-evaluation records, not tenant-owned
+  // workload runs. These legacy fields remain only for FILE compatibility and
+  // are ignored by the transport; EvalRunOrchestrator mints the returned ID.
+  string tenant_id = 1 [deprecated = true];
+  string evaluation_run_id = 2 [deprecated = true];
+  string golden_set_reference = 3 [deprecated = true];
+  string candidate_version = 4 [deprecated = true];
+  string golden_set_name = 5;
+  // Real, persisted EvalRun.trigger enum value ('manual', 'scheduled',
+  // 'pre_merge', 'promotion_gate'). Empty defaults to "manual" for
+  // backward compatibility with callers that predate this field.
+  string trigger = 6;
+}
+
+message RunEvaluationResponse {
+  reserved 100 to 199;
+
+  string evaluation_run_id = 1; // evr_ prefixed UUIDv7
+  string status = 2;
+  string results_json = 3;
+}
+
+message CheckReleaseGateRequest {
+  reserved 100 to 199;
+
+  // Release-gate decisions are global Engine records. This legacy tenant field
+  // remains only for FILE compatibility and is ignored by the transport.
+  string tenant_id = 1 [deprecated = true];
+  string release_gate_key = 2;
+  string evaluation_run_id = 3; // UUID minted by RunEvaluation
+}
+
+message CheckReleaseGateResponse {
+  reserved 100 to 199;
+
+  bool passed = 1;
+  // ReleaseGate stores an aggregate pass-rate decision only. It does not
+  // persist individual threshold failures, so this is currently empty.
+  repeated string failed_thresholds = 2;
+}
+
+// ENGINE-FIX-P3-14: the Phase 9 staging-to-production ENGINE release gate
+// (src/promotion_gate.py) -- unrelated to CheckReleaseGate above, which
+// gates a single tenant workflow version's own eval run. This gate is a
+// distinct, much larger evidence bundle (9 metrics + 8 required checks +
+// 3 human approvals) for promoting this repo's own build, previously only
+// reachable via `python -m src.promotion_gate <evidence.json>` on a human's
+// terminal. Evidence is passed as JSON, not modeled field-by-field, to
+// match the Python evaluator's own dict-shaped evidence contract exactly
+// and avoid two independently-drifting schemas for the same evidence.
+message RecordPromotionDecisionRequest {
+  reserved 100 to 199;
+
+  // JSON object: subject, candidate, environment ("staging_to_prod"),
+  // eval_run_id, metrics {name: number}, checks {name: bool},
+  // approvals [string].
+  string evidence_json = 1;
+  string decided_by = 2; // optional; empty means unset
+}
+
+message RecordPromotionDecisionResponse {
+  reserved 100 to 199;
+
+  string decision = 1; // "approved" | "blocked"
+  bool backend_complete = 2;
+  repeated string reasons = 3;
+  string evidence_digest = 4;
+}

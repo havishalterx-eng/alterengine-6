@@ -1,0 +1,67 @@
+import { cp, mkdir } from "node:fs/promises";
+import { resolve } from "node:path";
+
+const root = process.cwd();
+const output = resolve(root, "dist/apps/orchestration-service");
+
+await mkdir(output, { recursive: true });
+await cp(
+  resolve(root, "apps/orchestration-service/drizzle"),
+  resolve(output, "drizzle"),
+  { recursive: true, force: true },
+);
+
+await mkdir(resolve(output, "proto"), { recursive: true });
+await cp(
+  resolve(
+    root,
+    "packages/contracts/proto/alter/conversation/v1/conversation.proto",
+  ),
+  resolve(output, "proto/conversation.proto"),
+  { force: true },
+);
+await cp(
+  resolve(root, "packages/contracts/proto/alter/modelgw/v1/modelgw.proto"),
+  resolve(output, "proto/modelgw.proto"),
+  { force: true },
+);
+await cp(
+  resolve(root, "packages/contracts/proto/alter/compiler/v1/compiler.proto"),
+  resolve(output, "proto/compiler.proto"),
+  { force: true },
+);
+await cp(
+  resolve(root, "packages/contracts/proto/alter/deployctl/v1/deployctl.proto"),
+  resolve(output, "proto/deployctl.proto"),
+  { force: true },
+);
+await cp(
+  resolve(root, "packages/contracts/proto/alter/registry/v1/registry.proto"),
+  resolve(output, "proto/registry.proto"),
+  { force: true },
+);
+await cp(
+  resolve(root, "packages/contracts/proto/alter/nodeexec/v1/nodeexec.proto"),
+  resolve(output, "proto/nodeexec.proto"),
+  { force: true },
+);
+await cp(
+  resolve(root, "packages/contracts/proto/alter/blackboard/v1/blackboard.proto"),
+  resolve(output, "proto/blackboard.proto"),
+  { force: true },
+);
+await cp(
+  resolve(root, "packages/contracts/proto/alter/toolgw/v1/toolgw.proto"),
+  resolve(output, "proto/toolgw.proto"),
+  { force: true },
+);
+await cp(
+  resolve(root, "packages/contracts/proto/alter/recovery/v1/recovery.proto"),
+  resolve(output, "proto/recovery.proto"),
+  { force: true },
+);
+await cp(
+  resolve(root, "packages/contracts/proto/alter/eval/v1/eval.proto"),
+  resolve(output, "proto/eval.proto"),
+  { force: true },
+);

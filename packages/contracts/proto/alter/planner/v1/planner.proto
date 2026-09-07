@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package alter.planner.v1;
+
+service PlannerService {
+  rpc Decompose(DecomposeRequest) returns (DecomposeResponse);
+  rpc Replan(ReplanRequest) returns (ReplanResponse);
+  rpc SelectStrategy(SelectStrategyRequest) returns (SelectStrategyResponse);
+}
+
+message ProblemContextReference {
+  string document_id = 1;
+  string chunk_reference = 2;
+  double confidence = 3;
+  string provenance_json = 4;
+}
+
+message ProblemSpec {
+  string objective = 1;
+  optional string current_situation = 2;
+  repeated string actors = 3;
+  repeated string systems_involved = 4;
+  repeated string constraints = 5;
+  repeated string required_data = 6;
+  optional string risk = 7;
+  repeated string missing_information = 8;
+  repeated string success_criteria = 9;
+  repeated ProblemContextReference context_references = 10;
+}
+
+message DecomposeRequest {
+  reserved 100 to 199;
+
+  string tenant_id = 1; // ten_ prefixed UUIDv7
+  string workspace_id = 2; // ws_ prefixed UUIDv7
+  string run_id = 3; // run_ prefixed UUIDv7
+  string objective = 4; // legacy wire field; HTTP callers must use problem_spec_json
+  string strategy = 5;
+  string problem_spec_json = 6; // canonical serialized ProblemSpec, required for Decompose
+}
+
+message DecomposeResponse {
+  reserved 100 to 199;
+
+  string task_skeleton_json = 1;
+  bool ambiguity_detected = 2;
+  repeated string clarification_questions = 3;
+}
+
+message ReplanRequest {
+  reserved 100 to 199;
+
+  string tenant_id = 1; // ten_ prefixed UUIDv7
+  string run_id = 2; // run_ prefixed UUIDv7
+  string current_dag_json = 3;
+  string failure_context_json = 4;
+}
+
+message ReplanResponse {
+  reserved 100 to 199;
+
+  string revised_skeleton_json = 1;
+  string reason = 2;
+}
+
+message SelectStrategyRequest {
+  reserved 100 to 199;
+
+  string tenant_id = 1; // ten_ prefixed UUIDv7
+  string objective = 2;
+  string mode = 3;
+}
+
+message SelectStrategyResponse {
+  reserved 100 to 199;
+
+  string strategy = 1;
+  string reason = 2;
+}

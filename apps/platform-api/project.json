@@ -1,0 +1,54 @@
+{
+  "name": "platform-api",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/platform-api/src",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": [
+        "{workspaceRoot}/dist/apps/platform-api"
+      ],
+      "options": {
+        "command": "tsc -p apps/platform-api/tsconfig.app.json"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "build"
+      ],
+      "options": {
+        "command": "node -r ./dist/apps/platform-api/tracing.js dist/apps/platform-api/main.js"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "options": {
+        "eslintConfig": "apps/platform-api/eslint.config.mjs",
+        "lintFilePatterns": [
+          "apps/platform-api/src/**/*.ts"
+        ]
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit -p apps/platform-api/tsconfig.json"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --config apps/platform-api/vitest.config.ts --coverage"
+      }
+    },
+    "test-db-integration": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run apps/platform-api/src/db/db.migration.spec.ts apps/platform-api/src/db/platform-db-schema-completeness.spec.ts apps/platform-api/src/identity/session-store.integration.spec.ts apps/platform-api/src/signup/platform-db.integration.spec.ts apps/platform-api/src/idempotency/idempotency-store.integration.spec.ts apps/platform-api/src/credentials/credential.repository.integration.spec.ts apps/platform-api/src/env-vars/env-var.repository.integration.spec.ts apps/platform-api/src/billing/billing.repository.integration.spec.ts apps/platform-api/src/billing/billing-webhook.integration.spec.ts apps/platform-api/src/marketplace/marketplace.repository.integration.spec.ts apps/platform-api/src/publisher/publisher.repository.integration.spec.ts apps/platform-api/src/registry/registry.repository.integration.spec.ts apps/platform-api/src/integrations/integration.repository.integration.spec.ts apps/platform-api/src/admin-tenants/admin-tenants.repository.integration.spec.ts apps/platform-api/src/entitlements/plan-definition-store.integration.spec.ts"
+      }
+    }
+  },
+  "tags": []
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@alterx/auth",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "dependencies": {
+    "@alterx/contracts": "workspace:*",
+    "@grpc/grpc-js": "1.14.4",
+    "@nestjs/common": "11.1.28",
+    "@nestjs/microservices": "11.1.28"
+  },
+  "devDependencies": {
+    "@alterx/adapters": "workspace:*",
+    "@testcontainers/postgresql": "12.0.4",
+    "@types/pg": "8.20.0",
+    "pg": "8.22.0"
+  }
+}
