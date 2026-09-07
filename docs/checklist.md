@@ -32,13 +32,15 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocked
 
 ## Phase 1 — infrastructure (parallel, blocked on nothing)
 
-- [ ] **1.1** Local environment as a maintained deliverable: one command, stack up, every
-      component reachable. Regression test so it stays fixed.
+- [~] **1.1** Local environment as a maintained deliverable: one command, stack up, every
+      component reachable. Regression test so it stays fixed. — *prompt issued 2026-09-08,
+      [`prompts/revive-01-environment.md`](prompts/revive-01-environment.md)*
 - [ ] **1.2** Export the 11 AST architecture gates from `alterengine--5`, each with a
       baseline allowlist of every current violation. Fails only on **new** violations.
 - [ ] **1.3** Export `loadConfig()`, contracts, METHOD.md, RULES.md.
-- [ ] **1.4** Triage every open PR before opening new work. A red PR holding a correct
-      diagnosis is more expensive than an open bug.
+- [x] **1.4** ~~Triage every open PR before opening new work.~~ — **done 2026-09-08.
+      Zero open PRs in `alter-x-4-`. All 14 assessment fixes (#113–#126) merged; main
+      current as of 2026-09-06. Two open issues, both decisions not code: #117 and #125.**
 
 ## Phase 2 — real provider
 
