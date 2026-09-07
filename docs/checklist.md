@@ -21,6 +21,10 @@ of Track C are ours, not the plan's. They are called out rather than folded in s
 *Days · Havish only. Written answers are the deliverable — a paragraph each. Three of the
 five block later phases outright.*
 
+**Brief prepared 2026-09-08: [`phase-0-decisions.md`](phase-0-decisions.md)** — each question
+with what the codebase actually says, the options, and a recommendation. Fill in the Answer
+fields; the recommendations are not decisions.
+
 - [ ] **0.1 memory credential** — *blocks Phase 2.* Memory forwards its caller's token to
       an endpoint that derives tenancy from the token itself, and minting a tenant-scoped
       one is off the table since #113. Either that endpoint accepts a tenant explicitly
