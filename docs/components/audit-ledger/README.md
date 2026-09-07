@@ -39,6 +39,14 @@ One structural note, safe today only because of the trigger: incremental verify 
 
 `verifyChain()` with no caller is design log **§7 pattern 3 verbatim**: real machinery with nothing driving it. The prescribed fix is a mandatory driver-exists test for every scheduled or background component, not just proof the mechanism works when called. §18 additionally requires audit minimization on owner account deletion — event skeleton only, held for a defined window, then genuinely destroyed — and the reason matters: if account deletion erases the log outright, the person with the strongest motive to destroy it is the one holding the button.
 
+## Decision — 2026-09-08 · design log §30
+
+**Every service-asserted tenant is audited.** Decision 0.1 lets an internal caller assert which tenant it is acting for, guarded by a shared service credential. That credential is the weak point, and the audit trail is what makes a leak recoverable rather than unbounded.
+
+New requirement on this component: internal calls that carry an asserted tenant produce an audit event naming the asserting service and the tenant asserted.
+
+Rationale: [`phase-0-decisions.md` §0.1](../../phase-0-decisions.md).
+
 ## What the finished component looks like
 
 - [ ] `verifyChain()` has a route and a schedule, even if only weekly (task 6.4).

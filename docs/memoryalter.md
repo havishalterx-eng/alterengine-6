@@ -184,6 +184,15 @@ Full reasoning, options and the code evidence behind each: [`phase-0-decisions.m
 **0.7 architecture documents — imported, then split three ways.** All five now live in `architecture/`; they previously existed only on one laptop with no backup. `layers.md`, `planes.md` and `whole.md` are binding now. `component-contracts.md` contributes its blast radius, fail mode, driver and non-responsibilities fields to the component READMEs, but its done gates are **targets, not gates that fail today**. **Why the split:** calling all 54 contracts "binding" would have manufactured 54 blockers on day one, several against Category 1 components we have promised not to touch.
 
 **Decided by.** Havish, after asking for each recommendation to be attacked and regenerated before approval.
+### 2026-09-08 — `alter-x-4-` is read-only; everything happens in `alterengine-6`
+
+**Decision.** Nothing is ever posted, pushed, commented or filed on `havishalterx-eng/alter-x-4-`. It is frozen, reference-only. Every artefact of this project — code, decisions, issues, prompts — belongs in `alterengine-6`.
+
+**Why.** Two live repositories for one project means two places to look and two versions of the truth. The 500 commits of history are already preserved here, so nothing is lost by never writing there again.
+
+**Consequence for Phase 0's done gate.** The action plan asks that each decision be linked from its issue; those issues are on the frozen repo. The gate's purpose is that a decision reaches whoever does the work, and here that is the component pages, not an issue tracker. Every Phase 0 decision is therefore written onto the README of every component it touches, carrying its rationale, a link to the full brief, and the original issue number.
+
+**Decided by.** Havish.
 ---
 
 ## 3. Checklist context

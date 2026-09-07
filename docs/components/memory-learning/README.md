@@ -36,6 +36,20 @@ This is not a missing method on one service. Memory authenticates a caller with 
 
 Either that endpoint accepts a tenant explicitly alongside a service credential, or the cycle stays. **Decision 0.1, blocked on Havish, blocking all of Phase 2.**
 
+## Decision — 2026-09-08 · design log §30
+
+**Internal service endpoints accept an explicit tenant alongside a service credential.** Memory stops discarding `tenant_id` at `orchestration_client.py:51` and sends it; orchestration's `/internal/` routes accept it.
+
+Three requirements, and the second and third are what make the first safe:
+
+1. **Authenticate the asserter** — the caller proves it holds the service credential.
+2. **Verify the assertion against data we already own** — the asserted tenant must match the tenant the addressed run belongs to. `run-outcome.service.ts:236` already queries `WHERE tenant_id = $1 AND run_id = $2` inside `withTenant()`, so a wrong assertion already returns nothing — but as an indistinguishable "not found". **It must refuse explicitly, with a named reason.**
+3. **Audit every service-asserted tenant** — the shared credential is the weak point; the trail is what makes a leak recoverable.
+
+**Stated limitation.** Every service presents the same shared token today, so this authenticates *that the caller is an Alter service*, not *which one*. Design log §2's tenant isolation therefore rests on that secret plus requirement 2. Acceptable now; tightens to per-service RS256 verification when M2M applications exist, with call sites unchanged.
+
+Rationale and rejected alternatives: [`phase-0-decisions.md` §0.1](../../phase-0-decisions.md). Implementation is task 2.1.
+
 ## What the finished component looks like
 
 - [ ] The credential edge implemented per decision 0.1 — if the endpoint takes an explicit tenant, that is an additive parameter plus a guard that it matches the service credential's scope.

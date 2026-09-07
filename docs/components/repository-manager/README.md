@@ -31,6 +31,16 @@ Declared surface for managing repositories. Nothing is known about its intended 
 
 Not in the design log. **Needs a scope decision before an engineering one** (decision 0.6). Until it is explicitly cut or explicitly scoped it keeps appearing in counts as pending work and distorting every estimate that includes it.
 
+## Decision — 2026-09-08 · design log §33 · **CUT FROM v1**
+
+**Cut.** Declared, never implemented, and unlike Deployment Manager it has no backend contract to build against. Nobody has stated what it is for.
+
+**Decided, not executed.** Cutting means removing or deprecating the declaration — a note is not a cut. Task 5.2 stays open until it is gone.
+
+Note that **Deployment Manager is not cut**: its backend contract is real (`DeployctlService`, three RPCs) and only the surface is missing. It remains task 5.3.
+
+Rationale: [`phase-0-decisions.md` §0.6](../../phase-0-decisions.md).
+
 ## What the finished component looks like
 
 - [ ] Either ships, or is **explicitly cut** from the first release and its contract marked as such.

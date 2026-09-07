@@ -36,6 +36,20 @@ Design log §22 item 9 makes **Agent Factory its own L4 component**, reversing t
 
 On the tier question, three options exist rather than the two the action plan lists. The plan's own read is **refuse above a ceiling — safer, and makes the failure visible.** Design log §9's pre-flight budget gate offers a third: create at the tier asked for, and bound abuse with spend caps rather than a tier ceiling.
 
+## Decision — 2026-09-08 · design log §31
+
+Two separable problems. Only one was ever a policy question.
+
+**Idempotency is not a policy question and does not wait for anything.** Pulled out of Phase 0 entirely as task **3.0**, ahead of the tier work. Creation becomes idempotent per tenant, workspace and capability set. A retrying caller currently writes a permanent agent row per attempt, so every day this stays open adds rows nothing will clean up.
+
+**On the tier: never create an agent that cannot satisfy the requirement that triggered its creation.** Hardcoding `STANDARD` while eligibility filters on that same column is a **correctness** defect, not a cost one — the failure surfaces several steps downstream where the cause is no longer recoverable.
+
+- When the requested tier exceeds policy, **fail the bind with a named reason** rather than substituting a cheaper agent.
+- The ceiling is a **deployment config value, defaulting to `STANDARD`**, raisable — not a constant.
+- Lift it deliberately once Run Manager's atomic pre-flight budget gate exists (task C10), since spend caps address the real objection to unbounded tiers.
+
+Rationale and rejected alternatives: [`phase-0-decisions.md` §0.3](../../phase-0-decisions.md). Was issue #125 on the frozen `alter-x-4-` repo.
+
 ## What the finished component looks like
 
 - [ ] Idempotent per tenant, workspace and capability set — a retrying caller stops writing a row per attempt.

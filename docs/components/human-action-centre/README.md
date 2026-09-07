@@ -33,6 +33,14 @@ The UI sends `status=open`; the API accepts `pending·approved·rejected·expire
 
 **Settled.** Design log §22 item 8 makes this inbox a **Platform-side read model** built on the engine's durable approval decision record — the engine holds the record because it is execution evidence feeding the audit chain and §16's promotion logic. A read model maps onto its source, never the reverse. **The engine's enum is canonical; the platform moves.** Recorded as decision 0.5. §27 also names Approval Inbox one of the five surfaces, and notes it cannot exist before the approval record does — it does.
 
+## Decision — 2026-09-08 · design log §22 item 8
+
+**The engine's enum is canonical** (`pending·approved·rejected·expired`). **The platform moves.**
+
+The approval inbox is a Platform-side read model built on top of the engine's durable decision record. The engine holds that record because it is execution evidence feeding the audit chain and §16's promotion logic. A read model maps onto its source, never the reverse.
+
+Rationale: [`phase-0-decisions.md` §0.5](../../phase-0-decisions.md). Implementation is task B-vocab.
+
 ## What the finished component looks like
 
 - [ ] The surface issues real requests against real routes.

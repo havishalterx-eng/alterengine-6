@@ -34,6 +34,16 @@ Fixed in #116 and then run. The Synthesizer was dropping each node's config on t
 
 Still writes `node_requirements` as an empty object where the task-skeleton path resolves the real map (#117). Nothing reads that column at run time — both the Executor and Recovery resolve capabilities fresh — so it is latent rather than broken. It is a wrong answer waiting for its first reader: an audit view or a cost estimate would be told the workflow requires no capabilities at all.
 
+## Decision — 2026-09-08 · design log §32
+
+**The architecture path copies the requirements map the caller already supplied**, rather than re-resolving it.
+
+Nearly free: `architecture_synthesizer/models.py:115` already validates `request.node_requirements` against the node keys, so the data is present at the call site and simply is not persisted.
+
+**Recorded residual, so it is not lost.** Filling the column leaves two sources for one fact — the stored map, and the fresh resolution the Executor (`nodeexec.service.ts:386`) and Recovery (`recovery-dispatch.service.ts:343`) each perform at run time. That is design log §7 pattern 4, duplicated primitives drifting apart, arrived at from the other direction. The clean resolution is for run-time consumers to read the stored value, or for the column to be deleted as redundant — **deferred as task C14**, because it touches the Executor, which is frozen during revival.
+
+Rationale and rejected alternatives: [`phase-0-decisions.md` §0.4](../../phase-0-decisions.md). Was issue #117 on the frozen `alter-x-4-` repo. Implementation is task 3.6.
+
 ## What the finished component looks like
 
 - [ ] `node_requirements` carries a real map, per decision 0.4.

@@ -387,3 +387,23 @@ Logged as Track C task C13.
 **Phase 0 is complete.** Every question has a written answer with its rationale. No code has
 changed. Each answer was drafted, attacked, and regenerated — three of the five changed
 materially under that attack, and the changes are described inside each answer.
+
+### On the action plan's "linked from its issue"
+
+The plan's done gate asks that each answer be linked from its issue. Those issues (#117,
+#125) live on `alter-x-4-`, which is **frozen and not written to** — every artefact of this
+project belongs in this repository.
+
+The gate exists so a decision reaches whoever does the work. Here, that is not an issue
+tracker: builders read `docs/components/<component>/README.md` and `docs/checklist.md`.
+Creating two orphan issues in a repository with no issue workflow would satisfy the words
+and miss the point.
+
+So every decision is written onto the component page of every component it touches —
+Memory & Learning, Audit Ledger, Agent Auto-Creation, the architecture compile path,
+Recovery, the Human Action Centre, Voice and Repository Manager — each carrying the
+decision, its rationale, a link back to this document, and the original issue number where
+one existed.
+
+When the team grows and an issue workflow exists in this repository, port the tracker
+deliberately rather than seeding it with two entries nobody is watching.

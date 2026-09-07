@@ -42,6 +42,16 @@ The self-heal engine. Classifies why a node failed, selects a strategy, and disp
 
 The bucket list is flagged in §29 as provisional: expect refinement once real testing surfaces failure modes not yet imagined.
 
+## Decision — 2026-09-08 · design log §24
+
+**`TaskSkeleton` is canonical** for `replan` and `recompile`, not `CompiledDag`.
+
+Recovery's replan *"jumps from the run path back into the design path."* The design path is L1→L5, and L5 (Graph Compiler) is what **produces** the DAG. Re-entering the design path means entering **above** the compiler, so replan hands back what that path consumes, not what it emits. The current code sends the run path's output back as the design path's input, inverting the crossing.
+
+Revives two of eight dispatchable strategies. Implementation is task 2.2.
+
+Rationale: [`phase-0-decisions.md` §0.2](../../phase-0-decisions.md).
+
 ## What the finished component looks like
 
 - [ ] `replan` and `recompile` send `TaskSkeleton`; both strategies live again.

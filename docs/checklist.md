@@ -21,7 +21,11 @@ of Track C are ours, not the plan's. They are called out rather than folded in s
 *Days · Havish only. Written answers are the deliverable — a paragraph each. Three of the
 five block later phases outright.*
 
-**PHASE 0 CLOSED 2026-09-08.** All five answered with rationale in
+**PHASE 0 CLOSED 2026-09-08.** Every decision is also written onto the component pages it
+affects, which is how the plan's "linked from its issue" gate is met — `alter-x-4-` is
+frozen and never written to.
+
+**Closed:** All five answered with rationale in
 [`phase-0-decisions.md`](phase-0-decisions.md); derived logic appended to the design log as
 §30–§33. No code changed.
 
@@ -186,14 +190,15 @@ against a real provider.
 *4–8 weeks · scope depends on decisions.* Both need a product decision before an
 engineering one. See 0.6.
 
-- [x] **5.1 voice** — **CUT 2026-09-08** (design log §33). Remove or deprecate the
-      declaration; a note is not a cut. Was: contract only. Six RPCs declared (`BindNumber`, `GetNumberBinding`,
+- [ ] **5.1 voice** — **decision made 2026-09-08: CUT** (design log §33). *Decided, not
+      executed.* The declaration still exists, so the six RPCs still generate clients and
+      still appear in every count. Remove or deprecate them — a note is not a cut. Six RPCs declared (`BindNumber`, `GetNumberBinding`,
       `ConfigureCallHandling`, `InitiateCall`, `GetAccountHealth`, `GetCapabilities`), no
       implementation under `apps/`. Needs a telephony vendor, a number-provisioning story,
       and a decision about whether voice ships at all. **The design log never mentions voice
       once** — not deferred like Project Mode, simply absent.
-- [x] **5.2 repository manager** — **CUT 2026-09-08** (design log §33). Remove or deprecate
-      the declaration. Was: declared, never built. C9. No backend contract to build
+- [ ] **5.2 repository manager** — **decision made 2026-09-08: CUT** (design log §33).
+      *Decided, not executed.* Remove or deprecate the declaration. C9. No backend contract to build
       against.
 - [ ] **5.3 deployment manager** — surface only. C8. The backend contract is real
       (`DeployctlService`, three RPCs); only the surface is missing. Cheapest of the three —
@@ -314,7 +319,8 @@ demo.
 2. **Never let "not assessed" collapse into "works."** Keep the fifth column.
 3. **A builder report is not evidence.** Verified independently, by running it.
 4. **Never delete branches. Never force-push.**
-5. **Grade review depth by blast radius.** Model Gateway has five direct dependents; a
+5. **Never write to `alter-x-4-`.** Frozen, reference-only. Every artefact belongs here.
+6. **Grade review depth by blast radius.** Model Gateway has five direct dependents; a
    read-only registry does not.
-6. **Record pre-provider scores as void before Phase 1 lands.** The first honest measurement
+7. **Record pre-provider scores as void before Phase 1 lands.** The first honest measurement
    will look like a regression, and someone will read it as one.
