@@ -175,10 +175,18 @@ never the reverse.
 
 Why each block of work on `checklist.md` exists, and what blocks it.
 
-**Phase 0 — decisions only the user can make.** Three of the original five are now
-closed (Recovery contract and approval vocabulary by the design log; #117 has a
-recommended reading). Two remain genuinely open: the memory credential cycle, and
-the Voice / Repository Manager scope call.
+**Numbering follows the action plan.** An earlier draft of `checklist.md` invented its own
+phase numbers, inserting an infrastructure phase ahead of the plan's Phase 1 and pushing
+everything down one. That was corrected on 2026-09-08: the checklist now uses the action
+plan's numbering exactly, so this document, the plan and the team share one vocabulary.
+Our two additions — task 1.0 and all of Track C — are marked `[+]` rather than folded in
+silently.
+
+**Phase 0 — five decisions, no code.** Two are closed from the design log (0.2 recovery
+contract, 0.5 action vocabulary). Three remain: the memory credential cycle (blocks Phase
+2), the auto-creation tier (blocks Phase 3), and the requirements map (latent). Two more
+sit outside the plan: the Voice / Repository Manager scope call, and whether the four
+architecture documents are binding.
 
 **Phase 1 — environment and gates.** Both are infrastructure and neither is blocked on
 a decision, so they start immediately. The environment matters more than its size
