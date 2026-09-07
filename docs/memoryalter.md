@@ -1,0 +1,475 @@
+# memoryalter.md — Alter Engine master record
+
+Everything decided about the Alter Engine, why it was decided, and what happened as a
+result. This file is the record. `checklist.md` is the terse list of work; `progress.md`
+is the terse log of what got done. Both of those carry their context here.
+
+**Rules for this file**
+
+- Append-only. Never rewrite or delete an entry.
+- A correction is a **new entry** that points at the old one. The old one stays.
+- Every entry is dated.
+- Raw-memory entries use a fixed shape: **What / Why / How / When / Where.**
+- Only the CEO session writes this file. Builders and the Adversary read it and report;
+  they do not edit it.
+
+---
+
+## 1. Identity
+
+**What Alter Engine is.** A system that takes a business problem, decides what topology
+should exist to solve it, builds and runs that topology durably, verifies the outcome
+against real external systems, repairs at the smallest broken layer, and learns safely
+from what happened.
+
+**The market gap it exists for.** n8n, LangChain and LangGraph all require a human to
+draw the graph. Nobody has a layer that decides *what topology should exist* for an
+arbitrary problem. That is the differentiator, and it is genuinely unsolved — including
+by every previous Alter build.
+
+**Two genuinely unproven pieces** (design log §1), which no amount of engineering
+discipline removes:
+1. Reliably turning an arbitrary problem into a *correct* multi-agent topology.
+2. Creating a brand-new agent live, mid-failure, and trusting it immediately.
+
+### The finish line
+
+Project Revive is finished when this runs, watched on a screen, not described in a report:
+
+> One real business problem goes in. The engine designs a topology for it. It runs it.
+> It verifies the outcome against real external systems. One node is deliberately broken —
+> the engine detects it, replans, recovers, records the memory, and the drift score is
+> visible to the tenant that owns it.
+
+Every piece of work is judged by whether it moves that demo closer. Anything that does
+not is parked.
+
+### Current phase
+
+**Project Revive.** Not a rebuild. The engine assessed on 6 September 2026 is the
+product. The design log is now a **standards document** — rules the code is held to —
+not a build plan.
+
+---
+
+## 2. Decisions
+
+Append-only. Newest at the bottom of each dated block.
+
+### Prior decisions carried forward
+
+Decisions from the `alterengine--5` ground-up rebuild are preserved verbatim in
+[`prior/DECISIONS-alterengine-5.md`](prior/DECISIONS-alterengine-5.md) and
+[`prior/CHECKLIST-alterengine-5.md`](prior/CHECKLIST-alterengine-5.md). They are
+**historical record, not active direction** — that build is frozen. They are kept
+because they contain real reasoning about the architecture gates, RLS enforcement,
+and contract shapes that this build will reuse.
+
+### 2026-09-07 — Stop the ground-up rebuild
+
+**Decision.** Stop building `alterengine--5`. It reached 1 component of 55 after
+substantial effort.
+
+**Why.** The team's assessment of the existing engine proved 25 components work end to
+end. That fact was not known when the design log declared old repos "reference/prior-art
+only." 25 running components beats 1.
+
+**Rejected.** Continuing the 55-component sequence. Cost was not the writing of code —
+it was proving each component, which took multiple review rounds each.
+
+**Decided by.** Havish.
+
+### 2026-09-07 — The existing engine is the product
+
+**Decision.** Revive the assessed engine. Do not port its working components into a
+clean repo and re-verify them there.
+
+**Why.** "Works end to end" and "satisfies a contract" are different bars. Porting a
+component means re-verifying it against a bar it was never built for, so port cost lands
+close to build cost. Writing the code was roughly 30% of each component's effort; proving
+it was the rest. Porting only skips the 30%, and only on the cheap components — the hard
+ones (Synthesizer, Planner, Recovery loop) are unbuilt in every repo.
+
+**Rejected.** Bulk-migrating the 25 working components into a clean repo.
+
+**Decided by.** Havish, after the alternative was argued for and set aside.
+
+### 2026-09-07 — The design log becomes a standards document
+
+**Decision.** The design log stops being a build plan. It is the source of *decisions and
+standards* the revived engine is held to.
+
+**Why.** Most of the log's value for an existing codebase is enforceable rules — the four
+systemic patterns, fail-closed, the two-path model — not architecture that must be built
+from zero.
+
+### 2026-09-07 — Do not touch the 25 working components
+
+**Decision.** No logic change and no code change to any Category 1 component during
+revival. Changes come later, only if needed, and are recorded here before they are made.
+
+**Why.** They are the only verified value in the system. Changing them during a revival
+converts known-good into unknown.
+
+**Decided by.** Havish, explicitly.
+
+### 2026-09-08 — Repo, file layout, and who writes what
+
+**Decision.** New repo `havishalterx-eng/alterengine-6`. `docs/memoryalter.md`,
+`docs/checklist.md` and `docs/progress.md` live in the repo. The CEO session writes them.
+Builders and the Adversary read them and do not edit them.
+
+**Why.** These files exist so the person doing the work can read them without a relay. A
+Desktop-only copy breaks exactly that — and knowledge sitting where the worker cannot see
+it is what produced PR #89 (correct diagnoses of seven defects, unread for weeks, three
+rediscovered from scratch).
+
+**Rejected.** Desktop-only (builders cannot read it, no version history, dies with the
+laptop). Both places at once (two copies drift, nobody knows which is current). Builders
+editing it (turns a record into a scratchpad).
+
+**Decided by.** Havish.
+
+### 2026-09-08 — `alterengine--5` and `alter-x-4-` are frozen, not deleted
+
+**Decision.** Both repos stay. Neither is deleted. `alterengine--5` is the source of the
+build rules — 11 AST architecture gates, contracts, `loadConfig()`, METHOD.md, RULES.md.
+Its component code is not carried over.
+
+**Why.** `alterengine--5` had 1 component and 11 gates; the assessed engine has ~50
+components and no gates. The gates are the export worth making — far less code, far more
+leverage.
+
+### 2026-09-08 — Recovery contract: `TaskSkeleton` is canonical
+
+**Decision.** `replan` and `recompile` hand back a `TaskSkeleton`, not a `CompiledDag`.
+
+**Why.** Design log §24 states that Recovery's replan "jumps from the run path back into
+the **design path**." The design path is L1→L5, and L5 (Graph Compiler) is what *produces*
+the DAG. Re-entering the design path means entering **above** the compiler, so replan must
+hand back what that path consumes. The current code sends the run path's output back as
+the design path's input, which inverts the crossing.
+
+**What this closes.** The action plan lists this as Phase 0 decision 2 — blocking, and
+answerable only by the user. It was already answered in the design log and never carried
+into code. Two of eight dispatchable Recovery strategies are dead because of it.
+
+**Status.** Decided. Not yet implemented.
+
+### 2026-09-08 — Approval vocabulary: the engine's enum is canonical
+
+**Decision.** The platform sends the engine's vocabulary
+(`pending·approved·rejected·expired`). The platform side moves, not the engine.
+
+**Why.** Design log §22 item 8 makes the approval inbox a **Platform-side read model**
+built on top of the engine's durable decision record. A read model maps onto its source,
+never the reverse.
+
+**What this closes.** The second of the action plan's Phase 0 decisions.
+
+**Status.** Decided. Not yet implemented.
+
+---
+
+## 3. Checklist context
+
+Why each block of work on `checklist.md` exists, and what blocks it.
+
+**Phase 0 — decisions only the user can make.** Three of the original five are now
+closed (Recovery contract and approval vocabulary by the design log; #117 has a
+recommended reading). Two remain genuinely open: the memory credential cycle, and
+the Voice / Repository Manager scope call.
+
+**Phase 1 — environment and gates.** Both are infrastructure and neither is blocked on
+a decision, so they start immediately. The environment matters more than its size
+suggests: the assessment's sharpest finding is that components went unassessed because
+the local stack could not be started, *and that is the same mechanism that produced the
+previous wrong count.* The gates matter because landing them early means every
+subsequent fix arrives governed.
+
+**Phase 2 — provider.** One purchase unblocks eight components. The deeper reason is
+that design log §6 forbids verifying against mocks at all, so until a real provider
+exists the build philosophy cannot be followed even in principle.
+
+**Phase 3 — re-assess the ten.** Only possible after phases 1 and 2. Of three components
+previously counted as working from a source read alone, one worked, one failed its first
+request, and one had no surface to call. A real count precedes any further planning.
+
+**Phase 4 — the healing loop.** Recovery, Memory and Drift are consecutive steps in one
+cycle. Fixing any one alone changes nothing a user could observe. Both the assessment and
+the design log reach this independently.
+
+**Phase 5 — platform track.** Ten wiring items with zero dependencies on each other or on
+the engine, against backends that already answer and already enforce permissions. Largest
+block of finished-but-unreachable work in the product. Runs in parallel from day one.
+
+**Phase 6 — component fixes.** Category 3 work: capability filtering, tier resolution,
+auto-creation idempotency, cost ledger tenancy, #117.
+
+**Phase 7 — the two rewrites.** Planner and Synthesizer. Design log §24 supplies the
+budget argument: the design path runs once per workflow, so it is allowed to be slow and
+expensive.
+
+**Phase 8 — design-log compatibility.** Structural items, priced individually, never
+batched.
+
+---
+
+## 4. Progress context
+
+What got done, how, and what it proved. `progress.md` holds the terse log; the reasoning
+lives here.
+
+*(Nothing yet. Project Revive begins 2026-09-08.)*
+
+---
+
+## 5. Raw memory
+
+Every entry: **What / Why / How / When / Where.**
+
+### Local scratch clone decay
+
+- **What.** `/private/tmp/alterengine-5` is being deleted piecemeal by macOS tmp cleanup.
+  Root files (`package.json`, `AGENTS.md`, tsconfig) are gone, `docs/architecture` and
+  `docs/roles` are now empty directories, and `.git` is present but broken — git refuses
+  to read it.
+- **Why it matters.** Nothing was lost, because the GitHub remote holds everything. But
+  no local file under `/private/tmp` is trustworthy, and no working repo belongs there.
+- **How found.** Listing markdown files for this session's setup; git reported
+  `fatal: not a git repository`.
+- **When.** 2026-09-08.
+- **Where.** `/private/tmp/alterengine-5`. Remote intact at
+  `havishalterx-eng/alterengine--5`.
+
+### The mock provider inverts discrimination
+
+- **What.** The local mock embedding is a per-dimension SHA-256 hash, so every vector
+  lands in the same positive orthant and everything resembles everything.
+  `underwater.basket.weaving` scores **0.8740** against a text-summarization agent, while
+  the genuinely relevant `text.summarisation` scores **0.8703** — against a threshold of
+  0.6. Nonsense scores higher than the real thing.
+- **Why it matters.** A mock that answers everything is not a neutral stand-in. It
+  silently converts a discriminating system into one that accepts anything. It is why the
+  Conversation Manager returns one canned intent, why the eval harness scored 0 of 30, and
+  why Problem Understanding answered 503 to every request ever made of it. Every verdict
+  that turns on discrimination is unproven until a real provider is wired.
+- **How found.** Reaching Agent Auto-Creation required forcing the tier filter, because
+  the capability route can never produce a no-match locally.
+- **When.** Assessment run, 4–6 September 2026.
+- **Where.** Selection & Binding candidate query; the shared local mock provider.
+
+### PR #89 — a red PR holding a correct diagnosis
+
+- **What.** Opened 29 August with correct diagnoses of seven defects. It went red on CI,
+  nobody rebased it, and it sat twenty-seven commits behind. Three of those defects were
+  rediscovered from scratch during verification and fixed again as #99, #100, #103, #105.
+  One of its unshipped fixes silently breaks every multi-node workflow.
+- **Why it matters.** The assessment's own conclusion: *a red PR holding a correct
+  diagnosis is more expensive than an open bug, because the bug at least gets found twice.*
+- **How found.** Triaging it was the cheapest action available at any point. It was done
+  last.
+- **When.** 29 August – 6 September 2026.
+- **Where.** The assessed engine repo.
+
+### The local environment was the hidden blocker
+
+- **What.** Four services could not start from the configuration the repository shipped
+  (#121). `.env.local` carried one service's identity, two services required mutually
+  exclusive values of `ALTER_CONFIG_SOURCE`, audit-service and model-gateway defaulted to
+  the same gRPC port, and LocalStack seeded three resources while services read six — its
+  healthcheck asserting only the three it seeded, so it reported healthy while the rest
+  were absent. Nine gRPC bind defaults were wrong, six of them colliding in pairs.
+- **Why it matters.** "Classified from a source read" was not laziness — it was the only
+  option available without first reverse-engineering the local environment. **That is the
+  same mechanism that produced the previous wrong count**, and it will keep producing them
+  until the configuration lets a person run what they are judging.
+- **How fixed.** #122 and #123. Verified by starting five services together from one file
+  with no overrides: eighteen distinct ports, every health endpoint answering.
+- **When.** During the assessment, early September 2026.
+- **Where.** `.env.local`, gRPC bind defaults, LocalStack healthcheck.
+
+### #124 — the fix that broke the healthcheck
+
+- **What.** #122 grew the LocalStack healthcheck from four assertions to ten without
+  raising its 5s timeout. Ten calls take 7.4s, so Docker killed every probe and recorded
+  `exit -1`: the container reported unhealthy forever with all eight resources present,
+  and `docker compose up` waited on it.
+- **Why it matters.** A self-inflicted regression from a correct fix, found minutes after
+  merge by bringing the stack up. Worth remembering as a pattern: widening a check without
+  widening its budget.
+- **When.** Minutes after #122 merged.
+- **Where.** LocalStack healthcheck configuration.
+
+### The memory ↔ orchestration credential cycle
+
+- **What.** Memory authenticates a caller with the internal service token, then forwards
+  that same header onward to an endpoint that requires an M2M token it cannot mint. The
+  M2M token that endpoint wants is in turn rejected by memory.
+- **Why it matters.** This is not a missing method on one service. It is a **cycle that
+  crosses an authentication boundary**, which is why no single credential closes it.
+  Minting a tenant-scoped token is off the table by design — #113 removed the
+  `organization` parameter because an Alter tenant UUID was never valid against real
+  Auth0. The design log covers user authentication thoroughly (§20) and never addresses
+  service-to-service auth topology at all.
+- **When.** Found during the assessment; still open as of 2026-09-08.
+- **Where.** memory-service, orchestration-service.
+
+### Voice — declared in code, absent from the design
+
+- **What.** `VoiceService` declares six RPCs and no implementation exists under `apps/`.
+  No telephony vendor appears in the repository. The design log never mentions voice once
+  — not deferred the way Project Mode is explicitly deferred in §23, simply absent.
+- **Why it matters.** This is the one place the assessment and the design log disagree
+  about what the product is. Until it is explicitly cut or explicitly scoped, it keeps
+  appearing in counts as pending work and distorting every estimate that includes it.
+- **When.** Raised 2026-09-07. Undecided.
+
+### Category 2 and Category 3 look identical on screen
+
+- **What.** Both show a surface that does not work. They are different orders of cost.
+  Wiring means both ends exist and nobody connected them. Fixes mean the connection exists
+  and something along it is wrong.
+- **Why it matters.** A source read marks both as finished, because from the source both
+  halves look complete. This is why the fifth column ("not assessable") exists at all.
+- **Where.** `needs.html`, category definitions.
+
+---
+
+## 6. Component ledger
+
+61 components. Status from the assessment (engine verified against main, 4–6 September
+2026; platform as received and not independently verified).
+
+**Alignment key**
+- `ALIGNED` — design log imposes no requirement this component fails.
+- `NEEDS-LOGIC` — design log supplies logic the component is missing.
+- `CONFLICT` — design log says something different from the component's current shape.
+- `SILENT` — design log does not cover this component.
+
+### Category 1 — works end to end (25). Do not touch.
+
+| # | Component | Layer | Alignment | Note |
+|---|---|---|---|---|
+| 1 | Run Manager | L6 | NEEDS-LOGIC | §22 assigns it the pre-flight budget gate, which must be **atomic** against the budget record, not read-then-decide. Not present today. |
+| 2 | Durable Run Queue | L6 | ALIGNED | Dead-letter cap of 5 confirmed in source and regression test, not by live failure. |
+| 3 | Execution Workers | L6 | ALIGNED | Resumed an unclaimed run with no lost state. |
+| 4 | Durable Substrate | L6 | ALIGNED | Temporal. Every run closes COMPLETED carrying node output. |
+| 5 | Node Type Registry | L6 | ALIGNED | Returns exactly the eleven canonical node types. §14 wanted a real registry; it is one. |
+| 6 | Executor | L6 | ALIGNED | §13 wanted its own bounded module; it has one. Honoured edges and wave order in a two-node run. |
+| 7 | Blackboard | L6 | ALIGNED | Verified carrying one node's output to the next, not only direct read/write. |
+| 8 | Graph Compiler | L5 | ALIGNED | Built a diamond from a five-node skeleton: three edge kinds, four waves. Refused a ToolCall entry point — a real safety rule. |
+| 9 | Architecture compile path | L5 | NEEDS-LOGIC | Fixed in #116. Still writes `node_requirements` as `{}` (#117). |
+| 10 | SandboxExec | L6 | ALIGNED | First execution of this node type; exit_code 0 with stdout. |
+| 11 | HumanApproval | L6 | NEEDS-LOGIC | Pause and resume work. §16's four modes are not evidenced. The human-facing REST route is **unverified** — needs a properly minted delegation token. |
+| 12 | Gate | L6 | ALIGNED | Evaluated two CEL-subset conditions and routed on the result. |
+| 13 | Merge | L6 | ALIGNED | Converged the diamond without waiting for the deactivated branch — the deadlock every fan-out/fan-in design risks. |
+| 14 | Provisioning | L6 | ALIGNED | §23 requires it stay scoped small so Project Mode remains addable. It is. |
+| 15 | Model Gateway | L7 | ALIGNED | **Five direct dependents** — the only Category 1 component whose failure takes the engine down. Redaction validates an Aadhaar checksum both ways. |
+| 16 | Sandbox | L7 | ALIGNED | Holds its six-RPC boundary with no browser or database surface. |
+| 17 | Verification & Quality Gate | L8 | NEEDS-LOGIC | Both paths real; a promoted tenant policy moved a threshold and flipped identical output pass→warn. But §5.1 (structured success criteria), §5.2 (mechanical read-back) and §5.3 (end-of-run holistic check) are **not evidenced**. See Open Questions. |
+| 18 | Policy Store | L8 | NEEDS-LOGIC | Full draft→canary→active lifecycle, tenant-scoped. §22 requires a **global tier structurally incapable of holding tenant content**. Does not exist yet, so it is free to add now. |
+| 19 | Synthesis | L8 | ALIGNED | Declines honestly when there is nothing verified upstream to degrade into. |
+| 20 | Capability Registry | L3 | NEEDS-LOGIC | Register/search/get/deactivate all behave; cross-tenant search returns nothing. §19 additionally requires it hold reusable workflow templates from day one. |
+| 21 | Audit Ledger | L8 | NEEDS-LOGIC | Most strongly defended component probed. Immutable under UPDATE and DELETE as service role **and** as superuser. One structural gap: incremental verify resumes from a checkpoint, so a forgery in checkpointed history is never re-examined, and the full-walk `verifyChain()` that catches it **has no route and no caller** — §7 pattern 3 verbatim. |
+| 22 | Cost Ledger | L8 | NEEDS-LOGIC | Honest about what it does not know (`confidence: "no_data"`). Three gaps: `COST_SOURCES` union not enforced (`source: "telepathy"` accepted); split on tenancy (`/costs/estimate` wants a bare UUID, `/costs/by-run` wants the `ten_` prefix); and §21/§22 require it record **verification verdicts from day one** or billing later needs backfill of data never captured. |
+| 23 | Conversation Manager | L1 | ALIGNED | Genuinely model-backed — injection screen, real Model Gateway call, five-value taxonomy. Quality unjudgeable locally: the mock returns one canned reply. |
+| 24 | Eval Harness | L8 | ALIGNED | Ran a real 30-case golden set to completion. Scored 0 of 30 — the right answer, not a broken harness: every case failed on the injection screen inside `ClassifyIntent` being unable to reach ads-core. §11 predicted exactly this by rejecting standalone-service safety. |
+| 25 | Problem Understanding | L2 | ALIGNED | The 503 was the mock, not the service (#126). One real behaviour exposed: the returned objective is the **caller's**, not the model's — a model cannot rewrite it while enriching the rest. |
+
+### Category 2 — needs wiring only (10). Platform, as received.
+
+Each is a finished screen and a working backend that were never introduced. Routes answer
+`403 RBAC_ROLE_DENIED`, not 404 — the backend exists and is authorized. **No dependencies
+on each other or on the engine.** All `ALIGNED`; design log §6 and §27 say this category
+should not exist, but remediation is pure wiring.
+
+| # | Component | Note |
+|---|---|---|
+| 26 | C23 Admin Console | Fourteen screens, eight backend modules, never once called by the product. |
+| 27 | C14 Marketplace | Eight methods, none wired. |
+| 28 | C15 Publisher & Payout | Seller profile and listings fully mock. |
+| 29 | C18 Cost & Billing | Ten methods across billing and billing-ops, none wired. |
+| 30 | C17 Notifications | Seven methods, none wired. |
+| 31 | C19 Discovery | Two methods, none wired. |
+| 32 | C22 Benchmarking | Seven methods, none wired. |
+| 33 | C26 Search | **Returns invented results** — the only item here that is actively misleading rather than merely inert. Take it first. |
+| 34 | C16 Tool Registry | Source read only, not observed live. |
+| 35 | C20 Media Services | Source read only, not observed live. |
+
+### Category 3 — needs fixes or missing methods (12). 7 engine verified, 5 platform as received.
+
+| # | Component | Layer | Alignment | Note |
+|---|---|---|---|---|
+| 36 | Selection & Binding | L4 | NEEDS-LOGIC | **No exact-capability filter at all.** Eligibility is tenant, workspace, status, tier and embedding similarity — nothing checks the agent actually has the capability asked for. A 30–40× latency and cost swap does not move the winner; `agent_id ASC` decides it. §8 and §12 both assume this scoring is real. |
+| 37 | Agent Auto-Creation | L4 | CONFLICT | §22 item 9 makes **Agent Factory its own L4 component**, because it has two callers in different layers — Selection & Binding on the design path, Recovery on the run path. Currently folded inside Selection & Binding. Also: hardcodes tier `STANDARD` while eligibility filters on that column, and three identical requests produced three different agents (#125). |
+| 38 | Capability Resolver | L3 | NEEDS-LOGIC | Advanced-tier terms tested before fast-tier ones in a plain if/elif, so an incidental adjective decides the tier. Set membership, not parsing. §3 requires real reasoning. |
+| 39 | Recovery | L8 | CONFLICT | Sends `CompiledDag` where the planner validates `TaskSkeleton`; two of eight strategies dead. **Settled by §24 — `TaskSkeleton` is canonical.** `repair` decides correctly then defers. §4 additionally requires an idempotency gate in front of Dispatch, backed by a Side-Effect Ledger (§22 item 7) that does not exist. |
+| 40 | Memory & Learning | L8 | SILENT | The credential cycle. Design log has no service-to-service auth topology. **Blocked on the user.** |
+| 41 | Drift Detector | L8 | NEEDS-LOGIC | Scores compute and persist correctly. The `drift_read` policy admits only model and provider subjects, so agent drift returns zero rows to its own tenant. §17 gives it an **outbound suggestion path to the user** on top of its inward path to Policy Store — neither is reachable today. |
+| 42 | Tool Gateway | L7 | NEEDS-LOGIC | Four tool families dispatch. Denominator unpinned — no protocol enum exists, and a live probe found three unimplemented, not two. §7 pattern 4 and §14's registry precedent both apply. |
+| 43 | C5 Run Experience | platform | ALIGNED | Stop and retry call `actions/cancel` and `actions/retry-node`; neither route exists. Reads work. Additive and safe. |
+| 44 | C7 Project Studio | platform | ALIGNED | No `GET /projects` and no `GET /projects/:id`. List and detail have nothing to call. Additive and safe. |
+| 45 | C6 Human Action Centre | platform | CONFLICT | UI sends `status=open`; API accepts `pending·approved·rejected·expired`. Only `expired` overlaps. **Settled by §22 item 8 — the engine's enum is canonical, the platform moves.** |
+| 46 | C13 Trigger Management | platform | CONFLICT | `testTrigger` and `removeTrigger` **report success without calling anything.** §5.5 fail-closed and §7 pattern 1 both forbid this. Take it early. |
+| 47 | C8 Deployment Manager | platform | SILENT | Declared, never implemented. Placed here rather than Category 4 because `DeployctlService` exists with three RPCs — the backend contract is real. |
+
+### Category 4 — build from scratch (4). 2 engine verified, 2 platform as received.
+
+| # | Component | Layer | Alignment | Note |
+|---|---|---|---|---|
+| 48 | Architecture Synthesizer | L4 | NEEDS-LOGIC | Given bare defaults, then customer-visible + human-approval + EU residency + PII all set, returns **byte-identical topology, waves, roles and a hardcoded `confidence 1.0`**. §1 names autonomous topology design the product's entire differentiator. §24 supplies the budget argument for a real model call. |
+| 49 | Planner | L2 | NEEDS-LOGIC | Selects strategy by counting words against a fixed keyword set, never calling a model. A padded trivial lookup escalates to manager-worker; a real three-team, twelve-country migration in 28 words does not. **Classification is inverted relative to actual scope.** §1 names this defect by name in the old build. |
+| 50 | C9 Repository Manager | platform | SILENT | Declared, never implemented. Not in the design log. Scope call needed. |
+| 51 | Voice | engine | SILENT | Six RPCs declared, no implementation. Design log never mentions voice. Scope call needed. |
+
+### Category 5 — not assessable yet (10). Held out of the four deliberately.
+
+None is known to be broken; none has earned a category. **Of three components previously
+counted as working on a source read alone, one worked, one failed its first request, and
+one had no surface to call** — which is why this column exists.
+
+| # | Component | Note |
+|---|---|---|
+| 52 | ads-core | Starts, serves, enforces the tenant prefix, refuses unauthenticated calls with 401. Retrieval — its actual job — needs a real embedding provider. Not a fix; a key. |
+| 53 | `contracts` package | Library with unit tests rather than a service with edges. Least worrying here. |
+| 54 | `auth` package | As above. |
+| 55 | `tenancy` package | As above. |
+| 56 | `shared-clients` package | As above. |
+| 57 | C10 Knowledge Management | Classified from source, not observed. Additionally depends on ads-core. |
+| 58 | C21 Comms Channels | Classified from source, not observed. |
+| 59 | C24 Platform Jobs | Classified from source, not observed. |
+| 60 | C25 Streaming Gateway | Classified from source, not observed. |
+| 61 | C27 Localization | Classified from source, not observed. |
+
+---
+
+## 7. Open questions
+
+| # | Question | Owner | Blocks |
+|---|---|---|---|
+| 1 | Does the orchestration endpoint accept an explicit tenant alongside a service credential? | Havish | The entire healing loop, which is half the demo. |
+| 2 | Voice — in scope or cut? | Havish | Component counts and every estimate that includes them. |
+| 3 | Repository Manager — in scope or cut? | Havish | As above. |
+| 4 | Auto-creation tier: create at the requested tier, refuse above a ceiling, or **create at the requested tier and bound abuse with spend caps** (§9's pre-flight budget gate offers this third option the action plan does not list)? | Havish | #125. |
+| 5 | `node_requirements` (#117): re-resolve, derive from the binding decision already made, or declare the column skeleton-path-only? Deriving reads best — it uses data already committed to rather than re-deciding it. | Havish | Latent. Nothing reads the column today. |
+| 6 | Do §5.1 structured success criteria and §5.2 mechanical read-back exist in the code at all? **Absence is inferred, not established** — the assessment never looked for them. | Verify before scheduling | Potentially a subsystem, not a patch. |
+| 7 | Are the four architecture documents beside the design log (`component-contracts`, `layer-architecture`, `plane-architecture`, `whole-architecture`) also binding standards, or superseded? | Havish | How much of the standards set gets exported. |
+| 8 | Approval notification delivery — push, email, or in-app badge (§16, §29)? | Havish | Does not block architecture; settle before the approval flow is built end to end. |
+
+---
+
+## 8. Sources
+
+| Document | What it is | Where |
+|---|---|---|
+| `needs.html` | Team's readiness assessment. Engine verified against main 4–6 Sep 2026; platform as received, not independently verified. | Supplied by Havish; text extract preserved in the working set. |
+| `action-plan-v1.html` | Team's proposed build sequence — six phases plus a parallel platform track, and a third-party services table. | As above. |
+| `alter-engine-rebuild-design-log.md` | 29 sections, status 2026-09-01. **The standards document.** | `~/Desktop/alter engine rebuild/` and `alterengine--5:docs/architecture/design-log.md` |
+| `alter-engine-component-contracts.md` | 2,100 lines. Per-component contracts. Binding status open — see Open Question 7. | `~/Desktop/alter engine rebuild/` |
+| `alter-engine-layer-architecture.md` | 521 lines. L0–L14 layer design. | As above. |
+| `alter-engine-plane-architecture.md` | 213 lines. Cross-cutting planes. | As above. |
+| `alter-engine-whole-architecture.md` | 259 lines. Whole-engine view. | As above. |
+| Reconciliation artifact | Side-by-side of the assessment against the design log — what the log already answers, where it goes further, where code must move, what nobody decided. | https://claude.ai/code/artifact/fa5cfa3f-fef0-4778-8973-a916cd1bcbb0 |
+| `alterengine--5` | Frozen ground-up rebuild. Source of the 11 AST architecture gates, contracts, `loadConfig()`, METHOD.md, RULES.md. Component code not carried over. | `havishalterx-eng/alterengine--5` |
+| `alter-x-4-` | Frozen. Prior art. | `havishalterx-eng/alter-x-4-` |
