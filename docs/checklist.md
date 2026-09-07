@@ -141,8 +141,9 @@ binding from an incorrect one.
       the winner; `agent_id ASC` decides it. The correctly-scoring `/bind-architecture`
       exists but has never run in the execution path — **treat as a migration with a
       fallback, not a swap.**
-- [ ] **3.0 [+] auto-creation idempotency** — **pulled out of Phase 0 and out of 3.3. Do
-      immediately, ahead of everything.** Not a policy decision, and it corrupts tenant data
+- [~] **3.0 [+] auto-creation idempotency** — **pulled out of Phase 0 and out of 3.3. Do
+      immediately, ahead of everything.** *Prompt issued 2026-09-08,
+      [`prompts/revive-30-autocreation-idempotency.md`](prompts/revive-30-autocreation-idempotency.md).* Not a policy decision, and it corrupts tenant data
       every time a caller retries. Unique on tenant + workspace + capability set.
 - [ ] **3.3 auto-creation tier** — from decision 0.3 (design log §31). Never create an agent
       that cannot satisfy the requirement that triggered it: above the configured ceiling,
