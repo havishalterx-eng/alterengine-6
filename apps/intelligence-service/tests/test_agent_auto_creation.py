@@ -1,5 +1,6 @@
 """Real-Postgres coverage for PLAN-8 agent auto-creation."""
 
+import asyncio
 import json
 import uuid
 from collections.abc import AsyncGenerator, Generator, Sequence
@@ -482,6 +483,150 @@ WHERE a.id = :agent_id
             )
 
         assert await table_counts(db_session) == (0, 0, 0)
+
+    async def test_three_identical_requests_create_one_agent(
+        self,
+        db_session: AsyncSession,
+    ) -> None:
+        """Reproduces the original defect (#125): three identical requests
+        used to mint three different agents. Now they must collapse to one,
+        and every repeat must return the same usable binding."""
+        requirement = NodeRequirement(
+            capabilities=["analysis.reasoning", "document.synthesis", "idem.serial"],
+            model_alias="STANDARD",
+            tools=[ToolRequirement(name="search.web", permissions=["web:read"])],
+        )
+        embedding_client = FakeEmbeddingClient(vector(1.0))
+        engine = AgentAutoCreationEngine(db_session, embedding_client)
+
+        before = await table_counts(db_session)
+        outcomes = [
+            await engine.create_for_no_match(
+                true_no_match(),
+                create_request(requirement),
+            )
+            for _ in range(3)
+        ]
+        after = await table_counts(db_session)
+
+        assert all(isinstance(o, CreatePersonaResponse) for o in outcomes)
+        agent_ids = {o.agent_id for o in outcomes if isinstance(o, CreatePersonaResponse)}
+        assert len(agent_ids) == 1
+        assert after == (before[0] + 1, before[1] + 1, before[2] + 1)
+
+    async def test_two_concurrent_identical_requests_create_one_agent(
+        self,
+        postgres_url: str,
+    ) -> None:
+        """The race that matters: two genuinely concurrent callers for the
+        same key must not both create. Both must receive a usable binding to
+        the single agent that wins. Two independent sessions/connections are
+        required -- sharing one session would serialize on the connection and
+        test nothing."""
+        requirement = NodeRequirement(
+            capabilities=["analysis.reasoning", "document.synthesis", "idem.concurrent"],
+            model_alias="STANDARD",
+            tools=[ToolRequirement(name="search.web", permissions=["web:read"])],
+        )
+        async_url = make_url(postgres_url).set(drivername="postgresql+asyncpg")
+        engine = create_async_engine(async_url)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+
+        async def create_one() -> CreatePersonaResponse | NoAgentMatch:
+            async with factory() as session:
+                embedding_client = FakeEmbeddingClient(vector(1.0))
+                creation_engine = AgentAutoCreationEngine(session, embedding_client)
+                outcome = await creation_engine.create_for_no_match(
+                    true_no_match(),
+                    create_request(requirement),
+                )
+                # Mirror the real router (selection_binding/router.py), which
+                # commits the session after bind()/create_for_no_match.
+                await session.commit()
+                return outcome
+
+        try:
+            async with factory() as session:
+                before = await table_counts(session)
+            outcomes = await asyncio.gather(create_one(), create_one())
+            async with factory() as session:
+                after = await table_counts(session)
+
+            assert all(isinstance(o, CreatePersonaResponse) for o in outcomes)
+            agent_ids = {
+                o.agent_id for o in outcomes if isinstance(o, CreatePersonaResponse)
+            }
+            assert len(agent_ids) == 1
+            assert after == (before[0] + 1, before[1] + 1, before[2] + 1)
+
+            # Both callers received a binding to the same, usable agent.
+            async with factory() as session:
+                bound = await SelectionBindingEngine(
+                    session, FakeEmbeddingClient(vector(1.0))
+                ).bind(
+                    binding_request(requirement),
+                    binding_context(),
+                )
+            assert isinstance(bound, BindAgentModelToolResponse)
+            assert bound.agent_id in agent_ids
+        finally:
+            await engine.dispose()
+
+    async def test_reordered_capabilities_hit_the_same_key(
+        self,
+        db_session: AsyncSession,
+    ) -> None:
+        """The same capability set in a different order must not create a
+        second agent — the key is order-independent."""
+        requirement_a = NodeRequirement(
+            capabilities=["analysis.reasoning", "document.synthesis", "idem.reorder"],
+        )
+        requirement_b = NodeRequirement(
+            capabilities=["document.synthesis", "idem.reorder", "analysis.reasoning"],
+        )
+        embedding_client = FakeEmbeddingClient(vector(1.0))
+        engine = AgentAutoCreationEngine(db_session, embedding_client)
+
+        before = await table_counts(db_session)
+        first = await engine.create_for_no_match(
+            true_no_match(),
+            create_request(requirement_a),
+        )
+        second = await engine.create_for_no_match(
+            true_no_match(),
+            create_request(requirement_b),
+        )
+        after = await table_counts(db_session)
+
+        assert isinstance(first, CreatePersonaResponse)
+        assert isinstance(second, CreatePersonaResponse)
+        assert second.agent_id == first.agent_id
+        assert after == (before[0] + 1, before[1] + 1, before[2] + 1)
+
+    async def test_different_capability_set_creates_a_second_agent(
+        self,
+        db_session: AsyncSession,
+    ) -> None:
+        """The constraint must not be too broad: a genuinely different
+        capability set still creates its own agent."""
+        embedding_client = FakeEmbeddingClient(vector(1.0))
+        engine = AgentAutoCreationEngine(db_session, embedding_client)
+
+        before = await table_counts(db_session)
+        first = await engine.create_for_no_match(
+            true_no_match(),
+            create_request(NodeRequirement(capabilities=["idem.diff.one"])),
+        )
+        second = await engine.create_for_no_match(
+            true_no_match(),
+            create_request(NodeRequirement(capabilities=["idem.diff.two"])),
+        )
+        after = await table_counts(db_session)
+
+        assert isinstance(first, CreatePersonaResponse)
+        assert isinstance(second, CreatePersonaResponse)
+        assert second.agent_id != first.agent_id
+        assert after == (before[0] + 2, before[1] + 2, before[2] + 2)
 
 
 def _vector_literal(values: Sequence[float]) -> str:

@@ -40,6 +40,7 @@ class TestMigrationFileStructure:
             "0003_create_capability_registry.py",
             "0004_split_agent_version_config.py",
             "0005_global_agents.py",
+            "0006_agent_auto_creation_idempotency.py",
         ]
 
     def test_all_tables_defined(self) -> None:
@@ -189,6 +190,32 @@ class TestSchemaAfterMigration:
         )
         enabled = {row[0] for row in result}
         assert enabled == set(TABLES), f"RLS not ENABLED+FORCED on: {set(TABLES) - enabled}"
+
+    def test_agents_idempotency_key_column_and_partial_unique_index(
+        self, conn: sa.engine.Connection
+    ) -> None:
+        """0006: agents gains idempotency_key and a partial unique index over
+        (tenant_id, workspace_id, idempotency_key) WHERE idempotency_key IS
+        NOT NULL, so concurrent auto-creation for one key cannot double-create."""
+        column = conn.execute(
+            sa.text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_schema='public' AND table_name='agents' "
+                "AND column_name='idempotency_key'"
+            )
+        ).scalar()
+        assert column == 1, "agents.idempotency_key column missing"
+
+        index = conn.execute(
+            sa.text(
+                "SELECT indexdef FROM pg_indexes "
+                "WHERE tablename='agents' AND indexname='agents_idempotency_key_unique'"
+            )
+        ).scalar()
+        assert index is not None, "agents_idempotency_key_unique index missing"
+        assert "WHERE (idempotency_key IS NOT NULL)" in index, (
+            "index must be partial (WHERE idempotency_key IS NOT NULL)"
+        )
 
 
 class TestTenantIsolation:
@@ -364,6 +391,48 @@ class TestVectorDimension:
 
 
 class TestDowngrade:
+    def test_0006_downgrade_removes_idempotency_column_and_index(
+        self, pg_url: str
+    ) -> None:
+        """Rollback pair for 0006: downgrading one revision must drop the
+        idempotency_key column and its partial unique index, and re-upgrading
+        must restore them."""
+        alembic_cfg = AlembicConfig(str(SERVICE_ROOT / "alembic.ini"))
+        alembic_cfg.set_main_option("script_location", str(SERVICE_ROOT / "alembic"))
+        alembic_cfg.set_main_option("sqlalchemy.url", pg_url)
+
+        command.downgrade(alembic_cfg, "0005")
+
+        engine = sa.create_engine(pg_url)
+        with engine.connect() as c:
+            column = c.execute(
+                sa.text(
+                    "SELECT 1 FROM information_schema.columns "
+                    "WHERE table_schema='public' AND table_name='agents' "
+                    "AND column_name='idempotency_key'"
+                )
+            ).scalar()
+            assert column is None, "idempotency_key column still present after downgrade"
+            index = c.execute(
+                sa.text(
+                    "SELECT 1 FROM pg_indexes "
+                    "WHERE tablename='agents' AND indexname='agents_idempotency_key_unique'"
+                )
+            ).scalar()
+            assert index is None, "unique index still present after downgrade"
+
+        command.upgrade(alembic_cfg, "head")
+
+        with engine.connect() as c:
+            column = c.execute(
+                sa.text(
+                    "SELECT 1 FROM information_schema.columns "
+                    "WHERE table_schema='public' AND table_name='agents' "
+                    "AND column_name='idempotency_key'"
+                )
+            ).scalar()
+            assert column == 1, "idempotency_key column not restored on re-upgrade"
+
     def test_downgrade_removes_all_tables(self, pg_url: str) -> None:
         alembic_cfg = AlembicConfig(
             str(SERVICE_ROOT / "alembic.ini")
