@@ -29,19 +29,40 @@ AWS credentials just to start the stack. Mock is the recommended local mode.
 **Running under real AWS AppConfig is an opt-in.** To prove a service runs
 against real AppConfig (not LocalStack), set `ALTER_CONFIG_SOURCE=appconfig`
 and provide the AppConfig identifiers the service reads from its own
-environment:
+environment. Every service reads the same canonical names:
 
-- model-gateway, tool-gateway, sandbox-service read
-  `APPCONFIG_APPLICATION_ID`, `APPCONFIG_ENVIRONMENT_ID`,
-  `APPCONFIG_CONFIGURATION_PROFILE_ID`;
-- platform-api reads `APPCONFIG_APP_ID`, `APPCONFIG_ENV_ID`,
-  `APPCONFIG_PROFILE_ID` (validated by `env.schema.ts`).
+- `APPCONFIG_APPLICATION_ID`, `APPCONFIG_ENVIRONMENT_ID`,
+  `APPCONFIG_CONFIGURATION_PROFILE_ID`.
+
+platform-api additionally accepts the legacy short forms
+(`APPCONFIG_APP_ID`, `APPCONFIG_ENV_ID`, `APPCONFIG_PROFILE_ID`) as a
+fallback; the long forms win when both are present. New configuration should
+use the long forms everywhere.
 
 Each service points at its own AppConfig application (e.g. `alterx-engine`
 for model-gateway, `alterx-tool-gateway` for tool-gateway) in `ALTER_REGION`.
 Under `appconfig`, the service also resolves its real secrets from AWS
 Secrets Manager and its real SSM parameters, so the corresponding real
 resources must exist. `ALTER_ENV=local` keeps the local secret namespace.
+
+The reference values in `.env.local.example` point at the real AWS resource
+names. audit-service and cost-ledger-service resolve their database secrets
+from AWS Secrets Manager regardless of config source, and orchestration-service
+reads `ALTER_ARTIFACTS_BUCKET_PARAM` eagerly at boot, so those resources must
+exist even in mock mode. The resources the committed references name are:
+
+- SSM parameters: `/alter/local/audit/archive-bucket`,
+  `/alter/local/orchestration/artifacts-bucket`,
+  `/alter/local/platform-api/system/actor-token-signing-key`
+- Secrets Manager: `alter/local/audit-service/db-password`,
+  `alter/local/audit-service/deletion-pseudonym-key`,
+  `alter/local/audit-service/deletion-service-token`,
+  `/alter/local/cost-ledger-service/database-credentials`,
+  `/alter/local/cost-ledger-service/pseudonym-key`
+
+`scripts/check-reference-resolution.sh` (see below) verifies every committed
+reference resolves against real AWS; it needs credentials and is gated behind
+`RUN_LIVE_REFERENCE_CHECK=1`.
 
 **Deployed environments** set `ALTER_CONFIG_SOURCE=appconfig` everywhere. In
 that world the two scoped overrides (`AUDIT_CONFIG_SOURCE`,
@@ -72,8 +93,9 @@ Expected local endpoints:
 - Tempo query API / health: `http://127.0.0.1:3200/ready`
 - Grafana UI (anonymous admin, local only): `http://127.0.0.1:3300`
 
-LocalStack ready hook creates `/alter/local/audit-service/system/database_credentials`
-from local runtime values and creates `alter-local-cost-events` with its DLQ.
+LocalStack ready hook creates the audit database secret at
+`alter/local/audit-service/db-password` from local runtime values and creates
+`alter-local-cost-events` with its DLQ.
 AWS SDK v3 reads `AWS_ENDPOINT_URL`, so all local AWS clients use LocalStack and
 production adapter code needs no LocalStack-specific branch.
 
@@ -595,6 +617,24 @@ service owns.
   added.
 - Shared mock providers remain available for services without local container
   bindings.
+
+## Reference resolution check
+
+`scripts/check-reference-resolution.sh` lists the real AWS SSM parameters and
+Secrets Manager secrets (names only, never values) and fails if any committed
+reference in `.env.local.example` does not exist. It needs live AWS
+credentials, which CI does not have, so it is gated behind
+`RUN_LIVE_REFERENCE_CHECK=1` (the same pattern as the live Titan embedding
+test) and is run manually:
+
+```bash
+RUN_LIVE_REFERENCE_CHECK=1 scripts/check-reference-resolution.sh
+```
+
+It is proven to fail: pointing any committed reference at a nonexistent name
+makes it exit non-zero naming the offending variable. Run it after changing a
+committed reference value, and before relying on the AppConfig path from
+committed configuration alone.
 
 ## Stop
 
