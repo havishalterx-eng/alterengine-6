@@ -374,7 +374,11 @@ demo.
       proposed blast radius / fail mode / driver values in `components/` with
       `architecture/component-contracts.md`'s. Its done gates are targets, not gates that
       fail today. Roughly a day; closes design log §29's open item.
-- [ ] **C16 make `verify-local-stack-health.sh` trustworthy, then wire it into CI.** **It
+- [~] **C16 one source for ports, and a health check worth trusting.** *Prompt ready
+      [`prompts/revive-C16-ports-and-health-check.md`](prompts/revive-C16-ports-and-health-check.md).*
+      **Port parameterisation folded in:** `docker-compose.yml` hardcodes fourteen host ports,
+      so two checkouts cannot coexist — which is both why the check cannot be trusted and why
+      the 1.5 measurement could not start. Three tasks have now paid for it. Original scope: **It
       failed its first real use:** task 1.3 ran on alternate ports and the script, which
       hardcodes committed ports, could not serve — the services were verified by hand
       instead. The port-sourcing fix is not cosmetic. Task 1.0
@@ -386,7 +390,12 @@ demo.
       state, not real behaviour); and **some port defaults are sandbox values, not committed
       ones**, so on a machine using committed ports those checks fail for the wrong reason.
       Fix both, then join the four `scripts/check-*.sh` gates in CI's `gate` job.
-- [~] **C21 make starting the stack a step, not research.** *Prompt ready
+- [x] **C21 make starting the stack a step, not research. CLOSED 2026-09-09.** Bootstrap
+      committed with create/merge/check modes, `--check` wired into CI's gate job — the first
+      verification artefact in this project to acquire a driver. Both undefined placeholders
+      resolved against the running stack, not guessed: `ADS_DB_PASSWORD=ads_core_local` from
+      `docker-compose.yml`, `MEMORY_DB_PASSWORD` defaulting to `AUDIT_DB_PASSWORD` in
+      `engine-db-init.sh`. **Left a gap — see C22.** Original scope: *Prompt ready
       [`prompts/revive-C21-env-bootstrap.md`](prompts/revive-C21-env-bootstrap.md).* **Two
       placeholders are referenced but never defined** — `ADS_DB_PASSWORD` and
       `MEMORY_DB_PASSWORD` — so the example is incomplete, not merely unsourceable, and
@@ -398,6 +407,12 @@ demo.
       different from what anyone runs. **This blocks task 1.5's live measurement**, and it is
       the mechanism the assessment blamed for two wrong counts, still present after task 1.0.
       Needs a bootstrap script that generates and propagates the values, committed.
+- [ ] **C22 the bootstrap breaks real AWS.** C21 fills `AWS_ACCESS_KEY_ID` and
+      `AWS_SECRET_ACCESS_KEY` from LocalStack placeholders, and environment variables beat the
+      `~/.aws` profile — so sourcing the generated file returns `InvalidClientTokenId` while
+      the real credentials are fine. **Second instance of the pattern `AWS_ENDPOINT_URL`
+      showed in 1.2**: a LocalStack variable silently defeating the real-AWS path, failing in
+      a way that points at the wrong thing. 1.2's instance got a fatal guard; this one has none.
 - [ ] **C20 the fallback chain cannot express a working provider.**
       `FallbackProviderSchema` is `z.enum(["anthropic", "openai"])`, so a fallback may only
       name Anthropic or OpenAI. Anthropic is out of scope by decision, and OpenAI-on-Bedrock
