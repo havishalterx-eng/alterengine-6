@@ -98,6 +98,37 @@ describe("platformApiEnvSchema", () => {
     ).toThrow("APPCONFIG_APP_ID required");
   });
 
+  it("accepts the canonical long-form AppConfig identifiers in appconfig mode", () => {
+    const env = validatePlatformApiEnv({
+      DATABASE_URL: "postgres://localhost/platform_db",
+      MARKETPLACE_DATABASE_URL: "postgres://localhost/marketplace_db",
+      MARKETPLACE_SEARCH_CURSOR_SECRET: cursorSecret,
+      SIGNING_KEY_PROVIDER: "mock",
+      ALTER_CONFIG_SOURCE: "appconfig",
+      APPCONFIG_APPLICATION_ID: "alterx-engine",
+      APPCONFIG_ENVIRONMENT_ID: "local",
+      APPCONFIG_CONFIGURATION_PROFILE_ID: "engine-local",
+    });
+    expect(env.APPCONFIG_APP_ID).toBe("alterx-engine");
+    expect(env.APPCONFIG_ENV_ID).toBe("local");
+    expect(env.APPCONFIG_PROFILE_ID).toBe("engine-local");
+  });
+
+  it("prefers the canonical long-form AppConfig identifiers over the short form", () => {
+    const env = validatePlatformApiEnv({
+      DATABASE_URL: "postgres://localhost/platform_db",
+      MARKETPLACE_DATABASE_URL: "postgres://localhost/marketplace_db",
+      MARKETPLACE_SEARCH_CURSOR_SECRET: cursorSecret,
+      SIGNING_KEY_PROVIDER: "mock",
+      ALTER_CONFIG_SOURCE: "appconfig",
+      APPCONFIG_APPLICATION_ID: "alterx-engine-long",
+      APPCONFIG_APP_ID: "alterx-engine-short",
+      APPCONFIG_ENVIRONMENT_ID: "local",
+      APPCONFIG_CONFIGURATION_PROFILE_ID: "engine-local",
+    });
+    expect(env.APPCONFIG_APP_ID).toBe("alterx-engine-long");
+  });
+
   it("selects marketplace object storage explicitly", () => {
     const base = { DATABASE_URL: "postgres://localhost/platform_db", MARKETPLACE_DATABASE_URL: "postgres://localhost/marketplace_db", MARKETPLACE_SEARCH_CURSOR_SECRET: cursorSecret, SIGNING_KEY_PROVIDER: "mock" };
     expect(validatePlatformApiEnv(base).MARKETPLACE_OBJECT_STORAGE_PROVIDER).toBe("mock");

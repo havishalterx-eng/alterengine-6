@@ -4,7 +4,10 @@ import {
   StartConfigurationSessionCommand,
   type AppConfigDataClientConfig,
 } from "@aws-sdk/client-appconfigdata";
-import { platformApiConfigSource } from "../config/env.schema";
+import {
+  normalizeAppConfigIdentifiers,
+  platformApiConfigSource,
+} from "../config/env.schema";
 
 export const CLI_CONFIG_PROVIDER = Symbol("CLI_CONFIG_PROVIDER");
 
@@ -68,9 +71,10 @@ export function cliConfigProviderFromEnvironment(): CliConfigProvider {
   if (platformApiConfigSource(process.env) !== "appconfig") {
     return { getCliPolicy: async () => { throw new Error("CLI policy requires AppConfig"); } };
   }
-  const applicationIdentifier = process.env.APPCONFIG_APP_ID;
-  const environmentIdentifier = process.env.APPCONFIG_ENV_ID;
-  const configurationProfileIdentifier = process.env.APPCONFIG_PROFILE_ID;
+  const normalized = normalizeAppConfigIdentifiers(process.env);
+  const applicationIdentifier = normalized.APPCONFIG_APP_ID;
+  const environmentIdentifier = normalized.APPCONFIG_ENV_ID;
+  const configurationProfileIdentifier = normalized.APPCONFIG_PROFILE_ID;
   if (!applicationIdentifier || !environmentIdentifier || !configurationProfileIdentifier) {
     return { getCliPolicy: async () => { throw new Error("CLI AppConfig identifiers unavailable"); } };
   }

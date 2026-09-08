@@ -178,9 +178,35 @@ export function platformApiConfigSource(env: NodeJS.ProcessEnv): string | undefi
   return env.PLATFORM_API_CONFIG_SOURCE?.trim() || env.ALTER_CONFIG_SOURCE?.trim();
 }
 
+// The canonical AppConfig identifier names are the long forms
+// (APPCONFIG_APPLICATION_ID / APPCONFIG_ENVIRONMENT_ID /
+// APPCONFIG_CONFIGURATION_PROFILE_ID), matching the internal field names every
+// service uses. platform-api's schema and its consumers read the short forms
+// (APPCONFIG_APP_ID / APPCONFIG_ENV_ID / APPCONFIG_PROFILE_ID), so this maps
+// the long form onto the short form when the short form is absent. Both sets
+// keep working; the long form wins when both are present.
+const APPCONFIG_LONG_TO_SHORT: ReadonlyArray<readonly [string, string]> = [
+  ["APPCONFIG_APPLICATION_ID", "APPCONFIG_APP_ID"],
+  ["APPCONFIG_ENVIRONMENT_ID", "APPCONFIG_ENV_ID"],
+  ["APPCONFIG_CONFIGURATION_PROFILE_ID", "APPCONFIG_PROFILE_ID"],
+];
+
+export function normalizeAppConfigIdentifiers(
+  env: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
+  const normalized: NodeJS.ProcessEnv = { ...env };
+  for (const [longName, shortName] of APPCONFIG_LONG_TO_SHORT) {
+    const longValue = env[longName]?.trim();
+    if (longValue !== undefined && longValue.length > 0) {
+      normalized[shortName] = longValue;
+    }
+  }
+  return normalized;
+}
+
 export function validatePlatformApiEnv(env: NodeJS.ProcessEnv): PlatformApiEnv {
   const parsed = platformApiEnvSchema.safeParse({
-    ...env,
+    ...normalizeAppConfigIdentifiers(env),
     ALTER_CONFIG_SOURCE: platformApiConfigSource(env),
   });
 
