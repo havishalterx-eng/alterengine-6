@@ -20,8 +20,12 @@ Format: `YYYY-MM-DD · task · what was demonstrated · who verified`
 
 ---
 
-## Not yet started
+## Where things stand
 
-Phase 0 decisions 0.1–0.6 are open. 0.7 and 0.8 closed from the design log without code.
+**Phase 0 closed.** All five decisions answered with rationale, no code changed. Derived
+logic in design log §30–§33.
 
-Nothing in Phases 1–8 has begun.
+**Phase 1 in progress.** 1.0 running. 1.1 verified live — credentials, region and Titan
+access all confirmed by real call. 1.2 prompt ready. 1.3, 1.4, 1.5 not started.
+
+**3.0** (auto-creation idempotency) prompt ready, waits on 1.0 finishing.

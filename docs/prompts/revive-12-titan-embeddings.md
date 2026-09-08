@@ -75,6 +75,46 @@ scores will be subtly wrong in a way no test currently catches — report it
 rather than changing selection_binding, which is Category 3 and not in
 this task's scope.
 
+A THIRD TRAP, IN THE ENVIRONMENT RATHER THAN THE ADAPTER
+
+.env.local.example sets AWS_ENDPOINT_URL=http://127.0.0.1:4566. That is a
+GLOBAL override in the AWS SDK, so every AWS call — including Bedrock —
+routes to LocalStack, which does not implement Bedrock. Real credentials
+with that line still in place produce a confusing failure that looks like
+a credentials problem and is not.
+
+You cannot simply remove it. LocalStack still serves S3, SQS, Secrets
+Manager and SSM for the rest of the stack, and removing the override
+breaks what task 1.0 just proved works.
+
+So Bedrock must bypass the global override while everything else keeps
+using it. Three shapes are available — a service-specific
+AWS_ENDPOINT_URL_BEDROCK_RUNTIME pointing at real AWS, an explicit
+endpoint passed to BedrockRuntimeClient in the adapter, or running the
+Bedrock-touching service without the global override. Pick one, and say
+why you picked it. Credentials are not the conflict: LocalStack ignores
+credentials entirely, so real ones work against both.
+
+ALREADY VERIFIED FOR YOU — DO NOT REDO, DO MATCH
+
+Bedrock Titan v2 was called live in ap-south-1 on 2026-09-08 as
+user/alterengine.dev, before this task was issued. It returned a 512-
+dimension normalized vector. Measuring capability string against
+capability string, which is what the system compares:
+
+    text.summarisation          0.8600   MATCH
+    underwater.basket.weaving   0.1214   no-match
+    quantum.teleportation       0.0757   no-match
+
+against the existing threshold of 0.6 at selection_binding/engine.py:223.
+
+These are your target numbers. Your wiring should reproduce them through
+the Embed RPC. If it does not, the wiring is wrong — the provider is not.
+Do not tune anything to make numbers appear; report the difference.
+
+The threshold needs NO re-tuning, which is worth knowing because task 3.1
+assumed it would.
+
 NO SILENT FALLBACK — THIS IS PART OF THE TASK, NOT A NICE-TO-HAVE
 
 Missing or invalid provider configuration must be a FATAL ERROR at startup,
