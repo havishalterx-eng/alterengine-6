@@ -118,8 +118,17 @@ false readings.
       unconditionally and makes every mock-space stored vector stale. *Prompt ready
       [`prompts/revive-13-appconfig.md`](prompts/revive-13-appconfig.md) — needs an AWS
       AppConfig application, environment and profile to exist first.*
-- [ ] **1.4 secrets plumbing.** Populate the real Secrets Manager and SSM entries services
-      resolve at startup. The LocalStack init script is the closest thing to a manifest.
+- [~] **1.4 secrets plumbing — really: make the AppConfig path reproducible.** Task 1.3
+      proved six services run under real AppConfig, but did it by hand-supplying reference
+      values, because **only two of eight committed references resolve against real AWS**.
+      Four point at resources that exist under a different name; cost-ledger's two point at
+      nothing at all. So the path works and is not reproducible from the repository — task
+      1.0's lesson, arriving somewhere else. Fix the references rather than renaming
+      resources, create only what is missing, unify `APPCONFIG_APP_ID` against
+      `APPCONFIG_APPLICATION_ID` (§7 pattern 4), and prove a bring-up from committed
+      configuration alone. **Convention for anything new: `/alter/<env>/<service>/<kebab-case>`.**
+      *Prompt ready [`prompts/revive-14-secrets-plumbing.md`](prompts/revive-14-secrets-plumbing.md)
+      — needs `secretsmanager:CreateSecret` granted first.*
 - [ ] **1.5 re-run everything — the point of the phase.** Re-run the eval golden sets
       against the real provider. **Expect bad scores and treat them as signal, not
       failure** — first time these components have been measured against something that can
@@ -358,6 +367,11 @@ demo.
       state, not real behaviour); and **some port defaults are sandbox values, not committed
       ones**, so on a machine using committed ports those checks fail for the wrong reason.
       Fix both, then join the four `scripts/check-*.sh` gates in CI's `gate` job.
+- [ ] **C19 tenant-id format drift, now in AWS resource names.** Tavily integration secrets
+      exist under four shapes for what looks like one tenant: a bare UUID, two `ten_`-prefixed
+      variants, and `ten_test0000…`. Same drift as the Cost Ledger tenancy split, except
+      fixing it here means recreating tenant secrets rather than editing a query. Decide the
+      canonical shape before more tenant secrets are created.
 - [ ] **C18 backfill: re-embed stored vectors when the provider changes.** *Detection and
       containment folded into task 1.3* — provenance recorded from `EmbedResponse.model_id`,
       stale vectors excluded from candidacy, exclusions counted. **What remains here is the
