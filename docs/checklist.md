@@ -386,7 +386,11 @@ demo.
       state, not real behaviour); and **some port defaults are sandbox values, not committed
       ones**, so on a machine using committed ports those checks fail for the wrong reason.
       Fix both, then join the four `scripts/check-*.sh` gates in CI's `gate` job.
-- [ ] **C21 make starting the stack a step, not research.** `.env.local.example` cannot be
+- [~] **C21 make starting the stack a step, not research.** *Prompt ready
+      [`prompts/revive-C21-env-bootstrap.md`](prompts/revive-C21-env-bootstrap.md).* **Two
+      placeholders are referenced but never defined** — `ADS_DB_PASSWORD` and
+      `MEMORY_DB_PASSWORD` — so the example is incomplete, not merely unsourceable, and
+      nobody can fill it correctly without deciding what they are. `.env.local.example` cannot be
       sourced: 25 lines carry `<placeholder>` values, including five database passwords that
       nineteen connection strings interpolate, plus a hex token and its SHA-256. Nothing
       generates it, and `local-dev.md` never says how. The working `.env.local` in use has 16
