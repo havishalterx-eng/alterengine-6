@@ -160,10 +160,19 @@ binding from an incorrect one.
       the winner; `agent_id ASC` decides it. The correctly-scoring `/bind-architecture`
       exists but has never run in the execution path — **treat as a migration with a
       fallback, not a swap.**
-- [~] **3.0 [+] auto-creation idempotency** — **pulled out of Phase 0 and out of 3.3. Do
-      immediately, ahead of everything.** *Prompt issued 2026-09-08,
-      [`prompts/revive-30-autocreation-idempotency.md`](prompts/revive-30-autocreation-idempotency.md).* Not a policy decision, and it corrupts tenant data
-      every time a caller retries. Unique on tenant + workspace + capability set.
+- [x] **3.0 [+] auto-creation idempotency. CLOSED 2026-09-08.** Auto-creation is now
+      idempotent per tenant + workspace + capability set. `agents` gains an
+      `idempotency_key` (SHA-256 of the *sorted* capability set) and a partial unique
+      index over `(tenant_id, workspace_id, idempotency_key) WHERE idempotency_key IS
+      NOT NULL` (migration 0006, with a real downgrade). The engine pre-SELECTs by key
+      and returns the stored agent without re-embedding; a genuine race is resolved by
+      `INSERT ... ON CONFLICT DO NOTHING` — the loser's conflicting INSERT blocks on the
+      unique index until the winner commits, then returns the winner's agent. Proven to
+      fail first: three identical requests minted three agents (#125); now they collapse
+      to one, two genuinely concurrent requests produce one usable binding, reordered
+      capabilities hit the same key, and a different capability set still creates its own
+      agent. Key scope is capabilities only — tier (hardcoded STANDARD today) is owned by
+      3.3.
 - [ ] **3.3 auto-creation tier** — from decision 0.3 (design log §31). Never create an agent
       that cannot satisfy the requirement that triggered it: above the configured ceiling,
       **fail the bind with a named reason**. Ceiling is config, default `STANDARD`.
