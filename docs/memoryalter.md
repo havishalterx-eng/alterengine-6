@@ -378,6 +378,27 @@ Every entry: **What / Why / How / When / Where.**
 - **The honest half.** No master prompt has ever stated this constraint. It was reachable — the rule sits in a file they were told to read — but it was never an instruction. **The prompt template is at fault, not the builder.** Fixed by adding the constraint to every future prompt.
 - **When.** 2026-09-08, task 3.0.
 
+### A count from a source read, made by the CEO session this time
+
+- **What.** Task 1.3's prompt stated that fifteen files across **seven** services read `ALTER_CONFIG_SOURCE`, and named eval-service among them. The builder checked and found **six**: every occurrence in eval-service is a comment or docstring describing the Node services it calls, with no runtime read anywhere in `apps/eval-service/src`.
+- **How the error was made.** `grep -rln` lists files *containing* a string. That output was carried into the prompt as files that *read* it, without checking whether any acted on it. **A count from a source read rather than from behaviour** — precisely the mechanism the assessment identified as producing two wrong component counts, committed here by the session that keeps citing it.
+- **Why it is worth recording rather than quietly fixing.** The rule "never let 'not assessed' collapse into 'works'" has a twin: never let "mentions it" collapse into "reads it". Both are the same failure — inferring behaviour from text. A grep is a source read with better ergonomics.
+- **When.** 2026-09-08, task 1.3.
+
+### The regression check did not help the first time it was needed
+
+- **What.** `verify-local-stack-health.sh`, produced by task 1.0, could not serve task 1.3's bring-up. It checks the full stack on committed ports, and 1.3 ran six services on alternate ports (3133–3138) to avoid colliding with the shared clone's running stack. Nine of its checks also read Docker's cached status rather than probing. The six services were verified directly instead.
+- **Why it matters.** Both limitations were known and written into the script's own header, and they are C16. But knowing about a gap is not the same as it costing nothing: **the check was useless on its first real use.** A check that only works in one configuration is a check that will keep not being there when wanted.
+- **What it implies for C16.** The port-sourcing fix is not cosmetic. Until ports come from the same place the services read them, the script serves exactly one scenario.
+- **When.** 2026-09-08.
+
+### Two sessions in one clone, again
+
+- **What.** The 1.3 builder worked in `~/Desktop/alterengine-6` — the CEO session's clone — committed to a local branch, and left it unpushed until told. It then had to run its bring-up on alternate ports to avoid the stack already running there.
+- **Why it matters.** This was flagged before any builder work started and happened anyway, because no prompt said where to clone. The cost so far: one unpushed commit that existed in exactly one place, and a bring-up on non-standard ports that made the regression check inapplicable — which is why the finding above exists at all.
+- **The fix.** Every master prompt states the working location, and it is not the CEO session's clone.
+- **When.** 2026-09-08.
+
 ### PR #89 — a red PR holding a correct diagnosis
 
 - **What.** Opened 29 August with correct diagnoses of seven defects. It went red on CI,

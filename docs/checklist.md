@@ -105,7 +105,12 @@ false readings.
       `healthCheck()` returns healthy without probing anything (`liveProbe: false`).
       *Prompt ready [`prompts/revive-12-titan-embeddings.md`](prompts/revive-12-titan-embeddings.md)
       — needs Titan access granted and 1.0 finished.*
-- [ ] **1.3 AppConfig configuration + embedding provenance.** Switch `ALTER_CONFIG_SOURCE`
+- [x] **1.3 AppConfig configuration + embedding provenance. CLOSED 2026-09-08.** Six Node
+      services answering under `appconfig` against real AWS; provenance recorded from
+      `EmbedResponse.model_id`, stale vectors excluded fail-closed, exclusions counted.
+      AppConfig is a documented **opt-in** — the committed default stays `mock` so local dev
+      needs no AWS credentials. **Was seven services in the prompt; eval-service never read
+      the variable.** Original scope: Switch `ALTER_CONFIG_SOURCE`
       from mock to `appconfig`; create the AppConfig application, environment and profile.
       Fifteen files across seven services read it and all validate it, so it is
       all-or-nothing in one pass — **run this task alone.** **C18's now-half is folded in
@@ -341,7 +346,10 @@ demo.
       proposed blast radius / fail mode / driver values in `components/` with
       `architecture/component-contracts.md`'s. Its done gates are targets, not gates that
       fail today. Roughly a day; closes design log §29's open item.
-- [ ] **C16 make `verify-local-stack-health.sh` trustworthy, then wire it into CI.** Task 1.0
+- [ ] **C16 make `verify-local-stack-health.sh` trustworthy, then wire it into CI.** **It
+      failed its first real use:** task 1.3 ran on alternate ports and the script, which
+      hardcodes committed ports, could not serve — the services were verified by hand
+      instead. The port-sourcing fix is not cosmetic. Task 1.0
       produced it and it is committed, but it does **not yet meet
       [`verification-standard.md`](verification-standard.md)** and is deliberately unwired
       until it does. Two gaps, both acknowledged in the script's own header: **nine of
@@ -399,11 +407,14 @@ demo.
    red. "Nothing to check here" must be argued in the report, never assumed by silence.
 5. **Never delete branches. Never force-push.**
 6. **Never write to `alter-x-4-`.** Frozen, reference-only. Every artefact belongs here.
-7. **Builders never edit `memoryalter.md`, `checklist.md` or `progress.md`.** The CEO session
+7. **Every master prompt states the working location, and it is never the CEO session's
+   clone.** Two sessions in one working directory has now cost an unpushed commit and a
+   bring-up on non-standard ports that made the regression check inapplicable.
+8. **Builders never edit `memoryalter.md`, `checklist.md` or `progress.md`.** The CEO session
    writes them; builders read them and report. Otherwise "what we decided" and "what a
    builder believed we decided" stop being distinguishable — which is the ambiguity these
    files exist to remove. Every master prompt must say so.
-8. **Grade review depth by blast radius.** Model Gateway has five direct dependents; a
+9. **Grade review depth by blast radius.** Model Gateway has five direct dependents; a
    read-only registry does not.
-9. **Record pre-provider scores as void before Phase 1 lands.** The first honest measurement
+10. **Record pre-provider scores as void before Phase 1 lands.** The first honest measurement
    will look like a regression, and someone will read it as one.
