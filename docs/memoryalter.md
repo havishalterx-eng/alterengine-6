@@ -462,6 +462,20 @@ Every entry: **What / Why / How / When / Where.**
 - **The rule is [[feedback_self_attack_before_recommending]] and it was skipped**, three days after being written down. Worth recording that having the rule is not the same as running it.
 - **When.** 2026-09-09.
 
+### The health check reported another stack's services as this one's
+
+- **What.** Running C16's reworked `verify-local-stack-health.sh` live, three checks passed against services this stack never started: `verification-service` on 8001, `memory-service` on 8002, and `eval-service` on 8003. Our compose brought up **ten dependency containers and zero application services**. Those three ports were held by stray `python3.1` processes.
+- **The tell nobody would have caught by reading the score.** Probing **eval-service**'s port returned `{"status":"ok","service":"intelligence-service"}` — the wrong service's identity, counted as a pass. The check asserts HTTP 200 and never asserts that the responder is the service it asked for.
+- **Why it is the same footgun one layer up.** C16 parameterised dependency ports and connection URLs. Application service ports were not, so the check probes defaults, and on a machine with sibling stacks the defaults belong to somebody else. Fixing the dependency layer moved the ambiguity rather than removing it.
+- **How found.** By running it, on a host with three stacks live. It cannot be found in a sandbox with no Docker, and it would not have been found by a run on a machine with only one checkout.
+- **When.** 2026-09-09, verifying C16 after merge.
+
+### What behaved correctly, and is worth keeping
+
+- **32 failures, every one named.** Seventeen gRPC checks reported `grpcurl not installed -- cannot fresh-probe gRPC (install grpcurl or this check is unverifiable)` rather than passing or silently skipping. A check that refuses to claim a result it cannot obtain is the whole point of verification-standard requirement 1, and this is the first artefact in the project to do it.
+- **Coexistence proved.** Ten containers on offset ports — 15433, 14566, 16379, 15434, 15435, 13200, 13300, 17233, 15001, 15002 — alongside two sibling stacks left untouched and still running. A row written to this stack's engine-db on 15433 read back from 15433 only. The collision is solved rather than swapped, which was the flaw in the alternative of stopping the sibling.
+- **When.** 2026-09-09.
+
 ### PR #89 — a red PR holding a correct diagnosis
 
 - **What.** Opened 29 August with correct diagnoses of seven defects. It went red on CI,

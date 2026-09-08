@@ -374,7 +374,12 @@ demo.
       proposed blast radius / fail mode / driver values in `components/` with
       `architecture/component-contracts.md`'s. Its done gates are targets, not gates that
       fail today. Roughly a day; closes design log §29's open item.
-- [~] **C16 one source for ports, and a health check worth trusting.** *Prompt ready
+- [x] **C16 one source for ports, and a health check worth trusting. CLOSED 2026-09-09.**
+      Fourteen ports parameterised, defaults unchanged, connection URLs deriving from the same
+      variables so they cannot disagree. Nine cached-status reads replaced by fresh probes.
+      Drift check wired into CI. **Coexistence proved live** — ten containers on offset ports
+      beside two untouched sibling stacks, with a row written and read back on the overridden
+      port only. Surfaced **C23** and **C24**. Original scope: *Prompt ready
       [`prompts/revive-C16-ports-and-health-check.md`](prompts/revive-C16-ports-and-health-check.md).*
       **Port parameterisation folded in:** `docker-compose.yml` hardcodes fourteen host ports,
       so two checkouts cannot coexist — which is both why the check cannot be trusted and why
@@ -407,6 +412,16 @@ demo.
       different from what anyone runs. **This blocks task 1.5's live measurement**, and it is
       the mechanism the assessment blamed for two wrong counts, still present after task 1.0.
       Needs a bootstrap script that generates and propagates the values, committed.
+- [ ] **C23 the health check must verify identity, not just status.** It asserts HTTP 200 and
+      never asserts the responder is the service it asked for. Live, that produced three false
+      passes against a sibling stack's processes — and probing **eval-service**'s port returned
+      `{"service":"intelligence-service"}`, counted as healthy. The response body already
+      carries `service`; compare it. **A 200 from the wrong service is a false pass**, which is
+      worse than a failure.
+- [ ] **C24 application service ports need what C16 gave dependency ports.** C16 parameterised
+      the fourteen dependency ports and every connection URL; application service ports stayed
+      literal. So the health check probes defaults, and on a machine with sibling checkouts the
+      defaults belong to someone else. Same footgun, one layer up.
 - [ ] **C22 the bootstrap breaks real AWS.** C21 fills `AWS_ACCESS_KEY_ID` and
       `AWS_SECRET_ACCESS_KEY` from LocalStack placeholders, and environment variables beat the
       `~/.aws` profile — so sourcing the generated file returns `InvalidClientTokenId` while
