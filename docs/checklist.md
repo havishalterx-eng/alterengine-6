@@ -105,9 +105,14 @@ false readings.
       `healthCheck()` returns healthy without probing anything (`liveProbe: false`).
       *Prompt ready [`prompts/revive-12-titan-embeddings.md`](prompts/revive-12-titan-embeddings.md)
       — needs Titan access granted and 1.0 finished.*
-- [ ] **1.3 AppConfig configuration.** Switch `ALTER_CONFIG_SOURCE` from mock to
-      `appconfig`; create the AppConfig application, environment and profile. Every service
-      validates this value, so it is all-or-nothing across all of them in one pass.
+- [ ] **1.3 AppConfig configuration + embedding provenance.** Switch `ALTER_CONFIG_SOURCE`
+      from mock to `appconfig`; create the AppConfig application, environment and profile.
+      Fifteen files across seven services read it and all validate it, so it is
+      all-or-nothing in one pass — **run this task alone.** **C18's now-half is folded in
+      as a second commit**, because flipping to appconfig switches embeddings to Titan
+      unconditionally and makes every mock-space stored vector stale. *Prompt ready
+      [`prompts/revive-13-appconfig.md`](prompts/revive-13-appconfig.md) — needs an AWS
+      AppConfig application, environment and profile to exist first.*
 - [ ] **1.4 secrets plumbing.** Populate the real Secrets Manager and SSM entries services
       resolve at startup. The LocalStack init script is the closest thing to a manifest.
 - [ ] **1.5 re-run everything — the point of the phase.** Re-run the eval golden sets
@@ -345,7 +350,12 @@ demo.
       state, not real behaviour); and **some port defaults are sandbox values, not committed
       ones**, so on a machine using committed ports those checks fail for the wrong reason.
       Fix both, then join the four `scripts/check-*.sh` gates in CI's `gate` job.
-- [ ] **C18 switching embedding provider is a data migration, not a config change.** Stored
+- [ ] **C18 backfill: re-embed stored vectors when the provider changes.** *Detection and
+      containment folded into task 1.3* — provenance recorded from `EmbedResponse.model_id`,
+      stale vectors excluded from candidacy, exclusions counted. **What remains here is the
+      repair:** a batch job that re-embeds existing rows, needing credentials at run time.
+      Until it exists, an agent whose vectors are stale is visible and harmless, but still
+      unfindable. Original finding: Stored
       vectors live in their producer's embedding space. Every existing `capability_embeddings`
       row is mock-space; the moment Titan is live for a tenant with existing agents, those
       vectors are meaningless and matching degrades to noise **silently** — no error, no
