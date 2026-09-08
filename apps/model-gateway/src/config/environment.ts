@@ -122,7 +122,6 @@ export function loadModelGatewayEnvironment(
   const configuredEmbeddingProvider =
     environment.MODEL_GATEWAY_EMBEDDING_PROVIDER?.trim() || "mock";
   if (
-    configSource === "mock" &&
     configuredEmbeddingProvider !== "mock" &&
     configuredEmbeddingProvider !== "titan"
   ) {
