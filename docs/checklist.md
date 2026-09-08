@@ -89,7 +89,15 @@ false readings.
       Titan embeddings, which the vector column is already sized for at 512 dimensions.
       Anthropic direct is faster to obtain and simpler to bill but leaves embeddings needing
       a second vendor.
-- [ ] **1.2 embeddings — the quieter half.** Wire `TitanEmbeddingProvider`
+- [x] **1.2 embeddings — the quieter half. CLOSED 2026-09-08.** Titan wired behind the
+      `Embed` RPC, Bedrock bypassing LocalStack with a fatal guard,
+      `MODEL_GATEWAY_EMBEDDING_PROVIDER=titan` as a local opt-in that AppConfig cannot
+      reach, and `PLATFORM_API_CONFIG_SOURCE` unblocking platform-api. Discrimination
+      asserted through real gRPC `Embed` calls, with the mock case as an inverted assertion
+      so proven-to-fail runs in CI. End to end: under the mock an unrelated request binds a
+      summarisation agent; under Titan it no-matches while a genuine request still binds.
+      Surfaced **C18**.
+- [x] ~~**1.2 (was open)**~~ Wire `TitanEmbeddingProvider`
       (`amazon.titan-embed-text-v2:0`) behind model-gateway's `Embed` RPC. Do not skip:
       Selection & Binding and Agent Auto-Creation both depend on it, and both currently
       return nonsense that looks like success. **Two traps:** the caller must pass
@@ -323,6 +331,14 @@ demo.
       state, not real behaviour); and **some port defaults are sandbox values, not committed
       ones**, so on a machine using committed ports those checks fail for the wrong reason.
       Fix both, then join the four `scripts/check-*.sh` gates in CI's `gate` job.
+- [ ] **C18 switching embedding provider is a data migration, not a config change.** Stored
+      vectors live in their producer's embedding space. Every existing `capability_embeddings`
+      row is mock-space; the moment Titan is live for a tenant with existing agents, those
+      vectors are meaningless and matching degrades to noise **silently** — no error, no
+      failed insert. Nothing records which provider produced a vector, so mock-space and
+      Titan-space rows are currently indistinguishable. Needs a provenance column and a
+      re-embed path before any tenant with real data switches. **Found by task 1.2's
+      counterfactual needing two vector rows for one capability.**
 - [ ] **C17 decide what the semantic cache is for.** `model-gateway` consults a semantic
       cache before every model call, threshold 0.95, on both invoke and stream paths. Under
       mock embeddings everything clusters at 0.85–0.87 so it only hits on identical text;

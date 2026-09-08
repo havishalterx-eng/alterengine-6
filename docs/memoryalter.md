@@ -353,6 +353,15 @@ Every entry: **What / Why / How / When / Where.**
 - **When.** 2026-09-08.
 - **Where.** `apps/model-gateway/src/gateway/model-gateway.service.ts:188,265,294`.
 
+### Changing embedding provider invalidates every stored vector
+
+- **What.** Stored vectors live in the embedding space of whatever provider produced them. `capability_embeddings` rows written under the mock are mock-space vectors; a Titan query vector compared against them is meaningless — cosine distance between two different spaces is noise, not similarity.
+- **How it surfaced.** Task 1.2's counterfactual needed **two vector rows for the same capability**, one mock-embedded and one Titan-embedded, so each run compared like with like. The builder disclosed this unprompted and correctly noted it controls representation, not eligibility — `candidate_count: 1` counts distinct agents, not rows.
+- **Why it matters beyond the fixture.** That workaround is fine in a test and impossible in production. **Every existing `capability_embeddings` row is mock-space.** The moment Titan becomes the live provider for a tenant with existing agents, every stored vector is in the wrong space and matching silently degrades to noise — no error, no failed insert, agents simply stop being found or start being found at random.
+- **What it implies.** Switching embedding provider is a **data migration**, not a configuration change: every stored vector must be re-embedded, and until it is, mixed-space rows produce meaningless comparisons. Nothing in the codebase records which provider produced a given vector, so there is currently no way to tell a mock-space row from a Titan-space one. Tracked as **C18**.
+- **When.** 2026-09-08, task 1.2.
+- **Where.** `capability_embeddings`, `apps/intelligence-service/src/selection_binding/engine.py`.
+
 ### PR #89 — a red PR holding a correct diagnosis
 
 - **What.** Opened 29 August with correct diagnoses of seven defects. It went red on CI,
