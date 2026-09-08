@@ -174,8 +174,15 @@ function requireFields<
 
 export type PlatformApiEnv = z.infer<typeof platformApiEnvSchema>;
 
+export function platformApiConfigSource(env: NodeJS.ProcessEnv): string | undefined {
+  return env.PLATFORM_API_CONFIG_SOURCE?.trim() || env.ALTER_CONFIG_SOURCE?.trim();
+}
+
 export function validatePlatformApiEnv(env: NodeJS.ProcessEnv): PlatformApiEnv {
-  const parsed = platformApiEnvSchema.safeParse(env);
+  const parsed = platformApiEnvSchema.safeParse({
+    ...env,
+    ALTER_CONFIG_SOURCE: platformApiConfigSource(env),
+  });
 
   if (!parsed.success) {
     const formatted = parsed.error.issues

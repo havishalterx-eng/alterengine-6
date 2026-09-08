@@ -25,6 +25,7 @@ describe("loadModelGatewayEnvironment", () => {
       serviceName: "model-gateway",
       region: "ap-south-1",
       configSource: "mock",
+      embeddingProvider: "mock",
       httpPort: 3023,
       grpcBindAddress: "0.0.0.0:50051",
       costLedgerGrpcAddress: "localhost:50060",
@@ -47,6 +48,9 @@ describe("loadModelGatewayEnvironment", () => {
           PRESIDIO_ANONYMIZER_URL: "http://presidio-anonymizer.local:5002",
           CACHE_REDIS_HOST: "cache.model-gateway.local",
           CACHE_REDIS_PORT: "6379",
+          AWS_ENDPOINT_URL: "http://127.0.0.1:4566",
+          AWS_ENDPOINT_URL_BEDROCK_RUNTIME:
+            "https://bedrock-runtime.ap-south-1.amazonaws.com",
         }),
       ),
     ).toMatchObject({
@@ -68,6 +72,7 @@ describe("loadModelGatewayEnvironment", () => {
       presidioAnonymizerUrl: "http://presidio-anonymizer.local:5002",
       cacheRedisHost: "cache.model-gateway.local",
       cacheRedisPort: 6379,
+      bedrockRuntimeEndpoint: "https://bedrock-runtime.ap-south-1.amazonaws.com",
       costLedgerGrpcAddress: "localhost:50060",
     });
   });
@@ -76,6 +81,91 @@ describe("loadModelGatewayEnvironment", () => {
     expect(() =>
       loadModelGatewayEnvironment(environment({ ALTER_ENV: "dev" })),
     ).toThrow(/mock config source is only permitted/);
+  });
+
+  it("requires an explicit Bedrock endpoint when AWS has a global endpoint override", () => {
+    const appConfig = {
+      ALTER_ENV: "dev",
+      ALTER_CONFIG_SOURCE: "appconfig",
+      APPCONFIG_APPLICATION_ID: "app-1",
+      APPCONFIG_ENVIRONMENT_ID: "env-1",
+      APPCONFIG_CONFIGURATION_PROFILE_ID: "profile-1",
+      ANTHROPIC_API_KEY_SECRET_REF: "/alter/dev/model-gateway/system/anthropic_api_key",
+      OPENAI_API_KEY_SECRET_REF: "/alter/dev/model-gateway/system/openai_api_key",
+      PLATFORM_ADMIN_SERVICE_TOKEN_SECRET_REF: "/alter/dev/model-gateway/platform-admin-token",
+      PRESIDIO_ANALYZER_URL: "http://presidio-analyzer.local:5001",
+      PRESIDIO_ANONYMIZER_URL: "http://presidio-anonymizer.local:5002",
+      CACHE_REDIS_HOST: "cache.model-gateway.local",
+      CACHE_REDIS_PORT: "6379",
+      AWS_ENDPOINT_URL: "http://127.0.0.1:4566",
+    };
+    expect(() => loadModelGatewayEnvironment(environment(appConfig))).toThrow(
+      /AWS_ENDPOINT_URL_BEDROCK_RUNTIME/,
+    );
+    expect(
+      loadModelGatewayEnvironment(
+        environment({
+          ...appConfig,
+          AWS_ENDPOINT_URL_BEDROCK_RUNTIME:
+            "https://bedrock-runtime.ap-south-1.amazonaws.com",
+        }),
+      ),
+    ).toMatchObject({
+      bedrockRuntimeEndpoint: "https://bedrock-runtime.ap-south-1.amazonaws.com",
+    });
+  });
+
+  it("allows Titan only as an explicit local embedding opt-in", () => {
+    expect(
+      loadModelGatewayEnvironment(
+        environment({
+          MODEL_GATEWAY_EMBEDDING_PROVIDER: "titan",
+          AWS_ENDPOINT_URL: "http://127.0.0.1:4566",
+          AWS_ENDPOINT_URL_BEDROCK_RUNTIME:
+            "https://bedrock-runtime.ap-south-1.amazonaws.com",
+        }),
+      ),
+    ).toMatchObject({
+      configSource: "mock",
+      embeddingProvider: "titan",
+      bedrockRuntimeEndpoint: "https://bedrock-runtime.ap-south-1.amazonaws.com",
+    });
+    expect(() =>
+      loadModelGatewayEnvironment(
+        environment({ MODEL_GATEWAY_EMBEDDING_PROVIDER: "other" }),
+      ),
+    ).toThrow(/MODEL_GATEWAY_EMBEDDING_PROVIDER/);
+  });
+
+  it("ignores the local embedding-provider flag in AppConfig mode", () => {
+    const appConfigInput = {
+      ALTER_ENV: "dev",
+      ALTER_CONFIG_SOURCE: "appconfig",
+      MODEL_GATEWAY_EMBEDDING_PROVIDER: "mock",
+      APPCONFIG_APPLICATION_ID: "app-1",
+      APPCONFIG_ENVIRONMENT_ID: "env-1",
+      APPCONFIG_CONFIGURATION_PROFILE_ID: "profile-1",
+      ANTHROPIC_API_KEY_SECRET_REF: "secret",
+      OPENAI_API_KEY_SECRET_REF: "secret",
+      PLATFORM_ADMIN_SERVICE_TOKEN_SECRET_REF: "secret",
+      PRESIDIO_ANALYZER_URL: "http://presidio-analyzer.local:5001",
+      PRESIDIO_ANONYMIZER_URL: "http://presidio-anonymizer.local:5002",
+      CACHE_REDIS_HOST: "cache.model-gateway.local",
+      CACHE_REDIS_PORT: "6379",
+    };
+    const appConfig = loadModelGatewayEnvironment(
+      environment(appConfigInput),
+    );
+    expect(appConfig).toMatchObject({ configSource: "appconfig" });
+    expect(appConfig).not.toHaveProperty("embeddingProvider");
+    expect(() =>
+      loadModelGatewayEnvironment(
+        environment({
+          ...appConfigInput,
+          MODEL_GATEWAY_EMBEDDING_PROVIDER: "other",
+        }),
+      ),
+    ).toThrow(/MODEL_GATEWAY_EMBEDDING_PROVIDER/);
   });
 
   it("rejects the mock config source when NODE_ENV is production, even if ALTER_ENV is local", () => {

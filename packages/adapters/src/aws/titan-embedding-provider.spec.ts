@@ -179,6 +179,9 @@ describe("TitanEmbeddingProvider", () => {
     expect(
       () => new TitanEmbeddingProvider({ region: "ap-south-1", modelId: "" }),
     ).toThrow(/model ID/);
+    expect(
+      () => new TitanEmbeddingProvider({ region: "ap-south-1", endpoint: "" }),
+    ).toThrow(/endpoint/);
   });
 
   it("reports configured health without making a live Bedrock call", async () => {

@@ -18,6 +18,7 @@ export const TITAN_TEXT_EMBEDDINGS_V2_MODEL_ID =
 
 export interface TitanEmbeddingProviderConfig {
   readonly region: string;
+  readonly endpoint?: string;
   readonly modelId?: string;
   readonly normalize?: boolean;
 }
@@ -63,7 +64,12 @@ export class TitanEmbeddingProvider implements EmbeddingProvider {
   readonly capabilities = TITAN_EMBEDDING_CAPABILITIES;
 
   readonly #client: BedrockRuntimeCommandClient;
-  readonly #config: Required<TitanEmbeddingProviderConfig>;
+  readonly #config: {
+    readonly region: string;
+    readonly endpoint?: string;
+    readonly modelId: string;
+    readonly normalize: boolean;
+  };
   readonly #now: () => Date;
 
   constructor(
@@ -77,13 +83,22 @@ export class TitanEmbeddingProvider implements EmbeddingProvider {
     if (config.modelId !== undefined && config.modelId.trim().length === 0) {
       throw new Error("Bedrock model ID is required");
     }
+    if (config.endpoint !== undefined && config.endpoint.trim().length === 0) {
+      throw new Error("Bedrock runtime endpoint is required when configured");
+    }
     this.#config = {
       region: config.region,
+      ...(config.endpoint === undefined ? {} : { endpoint: config.endpoint }),
       modelId: config.modelId ?? TITAN_TEXT_EMBEDDINGS_V2_MODEL_ID,
       normalize: config.normalize ?? true,
     };
     this.#client =
-      client ?? new BedrockRuntimeClient({ region: this.#config.region });
+      client ?? new BedrockRuntimeClient({
+        region: this.#config.region,
+        ...(this.#config.endpoint === undefined
+          ? {}
+          : { endpoint: this.#config.endpoint }),
+      });
     this.#now = now ?? (() => new Date());
   }
 

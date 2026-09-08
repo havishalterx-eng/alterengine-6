@@ -169,10 +169,27 @@ function createPIIRedactionProvider(
 function createEmbeddingProvider(
   environment: ReturnType<typeof loadModelGatewayEnvironment>,
 ): EmbeddingProvider {
-  if (environment.configSource === "mock") {
+  if (
+    environment.configSource === "mock" &&
+    environment.embeddingProvider === "mock"
+  ) {
     return createMockEmbeddingProvider();
   }
-  return new TitanEmbeddingProvider({ region: environment.region });
+  return new TitanEmbeddingProvider({
+    region: environment.region,
+    ...(environment.bedrockRuntimeEndpoint === undefined
+      ? {}
+      : { endpoint: environment.bedrockRuntimeEndpoint }),
+  });
+}
+
+function embeddingProviderLogMessage(
+  environment: ReturnType<typeof loadModelGatewayEnvironment>,
+): string {
+  if (environment.configSource === "appconfig") return "Embedding provider: Titan";
+  return environment.embeddingProvider === "titan"
+    ? "Embedding provider: Titan (local opt-in)"
+    : "Embedding provider: mock";
 }
 
 function createCacheProvider(
@@ -208,6 +225,7 @@ async function bootstrap(): Promise<void> {
   const adminServiceToken = await resolveAdminServiceToken(environment);
   const piiRedactionProvider = createPIIRedactionProvider(environment);
   const embeddingProvider = createEmbeddingProvider(environment);
+  console.info(embeddingProviderLogMessage(environment));
   const cacheProvider = createCacheProvider(environment);
   const queueProvider = createQueueProvider(environment);
   const costEventsQueueName = `alter-${environment.alterEnvironment}-cost-events`;
