@@ -386,6 +386,14 @@ demo.
       state, not real behaviour); and **some port defaults are sandbox values, not committed
       ones**, so on a machine using committed ports those checks fail for the wrong reason.
       Fix both, then join the four `scripts/check-*.sh` gates in CI's `gate` job.
+- [ ] **C21 make starting the stack a step, not research.** `.env.local.example` cannot be
+      sourced: 25 lines carry `<placeholder>` values, including five database passwords that
+      nineteen connection strings interpolate, plus a hex token and its SHA-256. Nothing
+      generates it, and `local-dev.md` never says how. The working `.env.local` in use has 16
+      assignments against the example's 139, so the documented `cp` produces something
+      different from what anyone runs. **This blocks task 1.5's live measurement**, and it is
+      the mechanism the assessment blamed for two wrong counts, still present after task 1.0.
+      Needs a bootstrap script that generates and propagates the values, committed.
 - [ ] **C20 the fallback chain cannot express a working provider.**
       `FallbackProviderSchema` is `z.enum(["anthropic", "openai"])`, so a fallback may only
       name Anthropic or OpenAI. Anthropic is out of scope by decision, and OpenAI-on-Bedrock

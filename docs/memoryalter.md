@@ -430,6 +430,15 @@ Every entry: **What / Why / How / When / Where.**
 - **A false negative I nearly reported.** The first pass showed mistral failing to produce JSON. The output began `{\n  "objective": ...` with a literal backslash-n — the AWS CLI's `--output text` escaping, not the model. Re-tested through the JSON response and it passed cleanly. Testing harnesses produce false negatives about the thing being tested, and a model's reputation is exactly the kind of claim that would have stuck.
 - **When.** 2026-09-09.
 
+### The local environment is startable, and starting it is still not a step
+
+- **What.** Attempting to run task 1.5's golden-set script on the CEO machine failed before any measurement: `.env.local.example` **cannot be sourced**. Twenty-five of its lines carry `<placeholder>` values — five local database passwords, a 32-byte hex token and its SHA-256, and nineteen connection strings that interpolate those same passwords. Bash reads `<` as a redirect, so `set -a; . file` dies on line 11.
+- **Nothing generates it.** There is no bootstrap script in `scripts/`, and `docs/local-dev.md` never says how to fill the placeholders or that they must be consistent across the nineteen derived URLs.
+- **The working `.env.local` on this machine has 16 assignments; the committed example has 139.** So `cp .env.local.example .env.local` — the documented starting point — produces something materially different from what anyone is actually running.
+- **Why this matters more than it looks.** Task 1.0 proved the stack *can* start, and it does. But it started because a person worked out the substitutions, and that work was never committed. **Startable is not the same as being a step.** This is the exact mechanism the assessment blamed for two wrong component counts — *"undocumented research rather than a step"* — still present after the task that was supposed to close it. 1.0's brief was "bring it up", not "make bringing it up reproducible", so this is a gap in the task rather than in the work.
+- **Why the measurement was not forced through anyway.** Generating passwords and substituting them by hand would have produced a golden-set number from an environment nobody could reproduce — which is what task 1.4 spent itself establishing is worthless. The finding is the deliverable; the number waits.
+- **When.** 2026-09-09, attempting task 1.5's live run.
+
 ### PR #89 — a red PR holding a correct diagnosis
 
 - **What.** Opened 29 August with correct diagnoses of seven defects. It went red on CI,
