@@ -307,6 +307,10 @@ demo.
       proposed blast radius / fail mode / driver values in `components/` with
       `architecture/component-contracts.md`'s. Its done gates are targets, not gates that
       fail today. Roughly a day; closes design log §29's open item.
+- [ ] **C16 wire `verify-local-stack-health.sh` into CI.** Task 1.0 produced it; nothing
+      runs it. An unwired check is `verifyChain()` again — machinery with no driver, creating
+      false confidence. CI's `gate` job already runs four `scripts/check-*.sh` gates; this
+      joins them, or a named schedule does if CI cannot bring the stack up.
 - [ ] **C15 one variable, one question — `ALTER_CONFIG_SOURCE`.** Engine services ask
       "mock or appconfig?"; platform-api asks "file or appconfig?". Two different questions
       wearing one name, currently resolved by per-service scoped overrides
@@ -330,9 +334,13 @@ demo.
    necessary gets recorded in `memoryalter.md` before it is made.
 2. **Never let "not assessed" collapse into "works."** Keep the fifth column.
 3. **A builder report is not evidence.** Verified independently, by running it.
-4. **Never delete branches. Never force-push.**
-5. **Never write to `alter-x-4-`.** Frozen, reference-only. Every artefact belongs here.
-6. **Grade review depth by blast radius.** Model Gateway has five direct dependents; a
+4. **Every task leaves behind something that keeps its result true.**
+   [`verification-standard.md`](verification-standard.md) is binding: real behaviour not
+   process state, runs without anyone remembering, **proven to fail**, nothing permanently
+   red. "Nothing to check here" must be argued in the report, never assumed by silence.
+5. **Never delete branches. Never force-push.**
+6. **Never write to `alter-x-4-`.** Frozen, reference-only. Every artefact belongs here.
+7. **Grade review depth by blast radius.** Model Gateway has five direct dependents; a
    read-only registry does not.
-7. **Record pre-provider scores as void before Phase 1 lands.** The first honest measurement
+8. **Record pre-provider scores as void before Phase 1 lands.** The first honest measurement
    will look like a regression, and someone will read it as one.

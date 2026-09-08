@@ -71,6 +71,21 @@ WHAT DONE LOOKS LIKE
   5. A migration with its rollback pair. check-migration-rollback-pairing.sh
      is an enforced CI gate.
 
+VERIFICATION — READ docs/verification-standard.md FIRST
+
+That document is binding on every task. Four requirements: the check tests
+real behaviour not process state; it runs without anyone remembering; it is
+PROVEN TO FAIL by breaking the thing on purpose; and nothing in it is
+permanently red.
+
+For this task the artefact is a test that reproduces the ORIGINAL defect —
+three identical requests producing three agents — and now passes. Not a
+nearby case. The concurrent version is the one that matters: serialised
+requests do not test a race.
+
+Prove it fails: run it against the code before your fix and paste the
+failure showing three rows.
+
 PROVE IT, WITH REAL EXECUTION AGAINST REAL POSTGRES
 
   a. Three identical requests in sequence produce ONE agent. Paste the

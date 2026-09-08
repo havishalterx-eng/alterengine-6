@@ -202,6 +202,22 @@ The first honest number will look like a regression, and someone reading
 later will treat it as one unless it is on the record that the old numbers
 never meant anything.
 
+VERIFICATION — READ docs/verification-standard.md FIRST
+
+That document is binding on every task. Four requirements: the check tests
+real behaviour not process state; it runs without anyone remembering; it is
+PROVEN TO FAIL by breaking the thing on purpose; and nothing in it is
+permanently red.
+
+For this task the artefact is a discrimination test, not a health script:
+relevant capability must outscore irrelevant ones through the real Embed
+RPC. Assert the RELATIONSHIP — relevant beats irrelevant — not the exact
+number 0.8600, which will drift with model versions and would make the test
+a liability.
+
+Prove it fails: point it at the mock provider and show it failing, since
+under the mock nonsense outscores relevance. Paste that output.
+
 WHAT DONE LOOKS LIKE
 
   1. Real Titan embeddings behind the Embed RPC.
