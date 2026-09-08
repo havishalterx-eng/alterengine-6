@@ -127,6 +127,70 @@ silently degrades to the mock reproduces the defect you are fixing, while
 making it invisible. Prove it: start the service with the region
 deliberately unset and paste the actual failure.
 
+ALSO IN THIS TASK — THE CONFIG-SOURCE FIX, AS A SEPARATE COMMIT
+
+Task 1.0 proved that platform-api cannot start from committed
+configuration. You are already in the configuration layer for the
+endpoint work above, so this is folded in — but keep it as its OWN
+COMMIT on the same branch, so the two changes can be reviewed and
+reverted independently. Do not interleave them.
+
+The contradiction, proven live by 1.0 rather than reasoned from schemas:
+
+  platform-api            accepts  "appconfig" | "local-file"
+  model-gateway, tool-gateway, sandbox-service, provisioning-service
+                          accept   "appconfig" | "mock"
+
+.env.local sets ALTER_CONFIG_SOURCE=mock for the Engine services, and
+platform-api's own migration then crashes verbatim with:
+
+  Invalid platform-api environment: ALTER_CONFIG_SOURCE: Invalid option:
+  expected one of "appconfig"|"local-file"
+
+The fix already exists in this repository, for exactly one service. Read
+apps/audit-service/src/config/environment.ts:89-98. It uses
+requireScopedValue(environment, "AUDIT_CONFIG_SOURCE",
+"ALTER_CONFIG_SOURCE") — a service-scoped variable that falls back to the
+shared one — and there is a test at environment.spec.ts:97 asserting the
+scoped value wins.
+
+DO exactly three things:
+
+1. Give platform-api the same treatment: PLATFORM_API_CONFIG_SOURCE,
+   falling back to ALTER_CONFIG_SOURCE, mirroring audit-service's shape.
+   Add the equivalent test.
+
+2. Set it in .env.local.example so the stack starts from committed
+   configuration with no shell exports. That is the whole point — 1.0 had
+   to export it by hand for one invocation, and an environment that needs
+   undocumented hand-edits is what produced two wrong component counts.
+
+3. Correct the comment at audit-service/src/config/environment.ts:90. It
+   currently reads "audit-service is the only service reading local-file
+   here". That is now FALSE — platform-api reads it too. A file that
+   explains the pattern must not state something untrue about it, or the
+   next person inherits the wrong model. Say instead that services declare
+   their own accepted values and read a service-scoped variable with the
+   shared one as fallback.
+
+DO NOT:
+
+- Do not change what any service accepts. Engine services wanting "mock"
+  and platform-api wanting "local-file" are asking genuinely different
+  questions; harmonising the values is a larger design change and is
+  recorded separately as Track C item C15.
+- Do not add scoped overrides to services that do not currently need one.
+- Do not touch audit-service beyond that comment.
+
+WHY THIS IS WORTH DOING NOW, STATED SO YOU CAN PUSH BACK
+
+Two services now need a scoped override where the code documents it as a
+one-off exception. That is design log section 7 pattern 4 — a
+hand-maintained assumption drifting as the system grows — and the third
+instance will be added by someone who read that false comment and
+believed it. Fixing the comment costs one minute and is the part that
+stops the drift.
+
 BEFORE YOU MEASURE ANYTHING — RECORD THE OLD SCORES AS VOID
 
 Every similarity score, eval result and quality verdict produced before

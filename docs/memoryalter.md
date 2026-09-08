@@ -312,6 +312,29 @@ Every entry: **What / Why / How / When / Where.**
 - **When.** 2026-09-08, during task 1.1 credential verification.
 - **Where.** `packages/adapters/src/aws/titan-embedding-provider.ts`, `apps/intelligence-service/src/selection_binding/engine.py:223,273`.
 
+### One variable answering two questions — and a comment that expired
+
+- **What.** `ALTER_CONFIG_SOURCE` is read by both planes with **incompatible accepted values**. platform-api accepts `appconfig|local-file`; model-gateway, tool-gateway, sandbox-service and provisioning-service accept `appconfig|mock`. `.env.local` sets `mock`, so platform-api's own migration crashes from committed configuration:
+
+  ```
+  Invalid platform-api environment: ALTER_CONFIG_SOURCE: Invalid option:
+  expected one of "appconfig"|"local-file"
+  ```
+
+- **Why it matters more than a missing variable.** The repository already solved this once, for audit-service, via a service-scoped override with a fallback (`requireScopedValue(environment, "AUDIT_CONFIG_SOURCE", "ALTER_CONFIG_SOURCE")` at `audit-service/src/config/environment.ts:92`). The comment above it reads: *"audit-service is the only service reading 'local-file' here."* **That statement is now false** — platform-api reads it too. A one-off exception has become a class, and the file that explains the pattern asserts otherwise, so the next person to hit this inherits the wrong model. Design log §7 pattern 4, arriving exactly as described: a hand-maintained assumption drifting as the system grows.
+
+- **The deeper defect.** Engine services are asking *"mock or appconfig?"*; platform-api is asking *"file or appconfig?"*. Two different questions wearing one name. Scoped overrides resolve the symptom; whether they become the documented pattern for every service, or the values get unified, is Track C item C15.
+
+- **How found.** Task 1.0, by running the stack — not by reading the schemas. The builder proved it with the verbatim crash and correctly refused to pick a fix, exporting the value for one shell invocation instead.
+- **When.** 2026-09-08.
+- **Where.** `apps/platform-api/src/config/env.schema.ts:28`, `apps/audit-service/src/config/environment.ts:89-98`.
+
+### #124 is still live, and its margin is gone
+
+- **What.** LocalStack's healthcheck still carries ten assertions on a 5s timeout. In a sandbox where each `awslocal` call costs ~2.4s, Docker kills every probe and the container reports `unhealthy` forever — while `curl http://127.0.0.1:4566/_localstack/health` returns 200 with every needed resource running.
+- **Why it matters.** #124 was the fix for exactly this and it merged. The assertions were never re-budgeted, so the fix holds only on hardware fast enough to finish ten calls in five seconds. **A check whose passing depends on machine speed is not a check.** It also means a regression script that includes LocalStack has a permanently-failing member on slower hosts, and a check people learn to ignore is worse than none.
+- **When.** 2026-09-08, task 1.0.
+
 ### PR #89 — a red PR holding a correct diagnosis
 
 - **What.** Opened 29 August with correct diagnoses of seven defects. It went red on CI,

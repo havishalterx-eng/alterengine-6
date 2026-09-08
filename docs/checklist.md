@@ -307,6 +307,13 @@ demo.
       proposed blast radius / fail mode / driver values in `components/` with
       `architecture/component-contracts.md`'s. Its done gates are targets, not gates that
       fail today. Roughly a day; closes design log §29's open item.
+- [ ] **C15 one variable, one question — `ALTER_CONFIG_SOURCE`.** Engine services ask
+      "mock or appconfig?"; platform-api asks "file or appconfig?". Two different questions
+      wearing one name, currently resolved by per-service scoped overrides
+      (`AUDIT_CONFIG_SOURCE`, and `PLATFORM_API_CONFIG_SOURCE` added in 1.2). Two instances
+      means it is the rule, not the exception. Decide whether scoped overrides become the
+      documented pattern for every service, or the values are unified. **Found by task 1.0
+      running the stack, not by reading it.**
 - [ ] **C14 node_requirements single source of truth** — from decision 0.4's recorded
       residual. A stored map plus fresh run-time resolution is §7 pattern 4. Either run-time
       consumers read the column, or it is deleted. Touches the frozen Executor, so **after
