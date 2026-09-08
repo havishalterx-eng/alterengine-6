@@ -98,6 +98,21 @@ TEMPO_OTLP_GRPC_PORT -> 4317  TEMPO_OTLP_HTTP_PORT -> 4318  GRAFANA_PORT -> 3300
 PRESIDIO_ANALYZER_PORT -> 5001  PRESIDIO_ANONYMIZER_PORT -> 5002
 ```
 Parameterised ports in compose: 14. No bare-literal host ports remain.
+With no overrides, the connection strings also resolve to the committed
+ports (e.g. `INTELLIGENCE_DB_URL=…@localhost:5433/intelligence_db`).
+
+**Override propagation (the footgun closed):** with `ENGINE_DB_PORT=5533`
+exported before sourcing a generated `.env.local`, the URLs track it:
+```
+INTELLIGENCE_DB_URL=postgresql+asyncpg://intelligence_service:…@localhost:5533/intelligence_db
+ORCHESTRATION_DATABASE_URL=postgresql://orchestration_service:…@127.0.0.1:5533/orchestration_db
+EVAL_DB_URL_SYNC=postgresql+psycopg2://eval_service:…@127.0.0.1:5533/eval_db
+ENGINE_DB_PORT=5533
+```
+Before this revision, overriding `ENGINE_DB_PORT` would have left the URLs at
+`5433` — quietly pointing services at whatever engine-db held 5433 (a
+sibling's). Now the URLs and compose read the same var, so an override moves
+both together.
 
 ## Verbatim: both failure modes named
 
@@ -146,7 +161,15 @@ check-stack-health-script: bare literal host port(s) in docker-compose.yml (must
   compose/health-script port-name drift.
 - **Developer machine / coexistence proof (wherever a stack is up):**
   `sh scripts/verify-local-stack-health.sh` and `scripts/verify-coexistence.sh`.
-  Trigger: a human running the demo / the C16 coexistence proof.
+  The coexistence proof now covers the **app layer**, not just dependencies:
+  after bringing this project's dependency stack up on overridden ports, it writes
+  a uniquely-marked row to `audit_db` through the SAME connection string
+  `audit-service` reads (`AUDIT_DATABASE_URL` with the overridden
+  `ENGINE_DB_PORT`), reads it back from the overridden port, and confirms the
+  default-port engine-db (a sibling's, on 5433) does NOT have the row — so the
+  app path provably reaches THIS stack's database, not a sibling's. That is the
+  exact failure C16 would otherwise hide. Trigger: a human running the demo /
+  the C16 coexistence proof.
 
 ## Anything in docker-compose.yml that is wrong rather than merely rigid
 
@@ -156,21 +179,31 @@ check-stack-health-script: bare literal host port(s) in docker-compose.yml (must
    the health script), no override anywhere." The fix is one source,
    overridable, defaults unchanged.
 
-2. **Service DB connection URLs in `.env.local.example` hardcode the default
-   ports** (`DATABASE_URL=…@localhost:5432/…`, `INTELLIGENCE_DB_URL=…@localhost:5433/…`).
-   Part A parameterises the compose *host* ports, so the dependency stack
-   can come up on overridden ports — but the application services'
-   connection URLs still name 5432/5433 literally, so a *full* app-stack
-   coexistence (deps + apps together on overridden ports) needs those URLs
-   to track the overrides too (e.g. `…@localhost:${ENGINE_DB_PORT:-5433}/…`).
-   This is **not done here** because it touches what the services read and is
-   beyond C16's stated scope ("parameterise every host port"; "do not change
-   what any service reads"). The C16 coexistence proof
-   (`scripts/verify-coexistence.sh`) therefore brings up the **dependency**
-   stack on overridden ports — the layer that was actually colliding (the
-   CEO's `Bind for 127.0.0.1:6379 failed` was a compose port collision) —
-   and health-checks it. Full app-stack coexistence on overridden ports is a
-   follow-on, flagged here honestly rather than silently widened.
+2. **Service DB connection URLs in `.env.local.example` previously hardcoded
+   the default ports** (`DATABASE_URL=…@localhost:5432/…`,
+   `INTELLIGENCE_DB_URL=…@localhost:5433/…`). This was a **footgun C16
+   armed**: before C16, rigid ports gave a loud bind failure on a second
+   checkout; after parameterising the compose host ports, the same override
+   would have let services quietly dial a sibling's database on the default
+   port (e.g. `alter-x-4-`'s `engine-db` on 5433, up two weeks and holding
+   real data) — strictly worse, and caused by this change. **Fixed in this
+   revision (review feedback, option a):** every connection string now
+   derives its port from the same `*_PORT` var compose reads —
+   `…@localhost:${ENGINE_DB_PORT:-5433}/…`, `…@localhost:${PLATFORM_DB_PORT:-5432}/…`,
+   `…@localhost:${ADS_DB_PORT:-5434}/…`, `…@localhost:${COST_DB_PORT:-5435}/…`,
+   and `ORCHESTRATION_DATABASE_PORT=${ENGINE_DB_PORT:-5433}`. The 14
+   `*_PORT` assignment lines are themselves override-survivable
+   (`PLATFORM_DB_PORT=${PLATFORM_DB_PORT:-5432}`), so an operator's
+   `export ENGINE_DB_PORT=5533` survives sourcing `.env.local` and
+   propagates into every URL. Verified: with `ENGINE_DB_PORT=5533` exported,
+   `INTELLIGENCE_DB_URL`, `ORCHESTRATION_DATABASE_URL` and `EVAL_DB_URL_SYNC`
+   all resolve to `:5533`; with no override, all resolve to `:5433`. This is
+   the smallest change that makes "one source for ports" actually one source,
+   and it is arguably what that phrase meant all along — the alternative
+   (make the mismatch fatal) was rejected because the URLs and the compose
+   ports reading the same var cannot mismatch by construction once they
+   share it. The coexistence proof's app-layer check (above) verifies a real
+   row written through that path lands on THIS stack's database only.
 
 3. **No other content in `docker-compose.yml` is wrong.** The healthcheck
    timeouts, the `LS_LOG`, the LocalStack pin to 4.14.0, the volume layout
