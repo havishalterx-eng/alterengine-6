@@ -1,0 +1,21 @@
+{
+  "version": "phase-1-qwen-all-aliases",
+  "bindings": {
+    "FAST": {
+      "model_id": "qwen.qwen3-32b-v1:0",
+      "capability_tags": ["low-latency"]
+    },
+    "STANDARD": {
+      "model_id": "qwen.qwen3-32b-v1:0",
+      "capability_tags": ["general"]
+    },
+    "ADVANCED": {
+      "model_id": "qwen.qwen3-32b-v1:0",
+      "capability_tags": ["reasoning"]
+    },
+    "CEILING": {
+      "model_id": "qwen.qwen3-32b-v1:0",
+      "capability_tags": ["frontier"]
+    }
+  }
+}
