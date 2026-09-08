@@ -399,6 +399,20 @@ Every entry: **What / Why / How / When / Where.**
 - **The fix.** Every master prompt states the working location, and it is not the CEO session's clone.
 - **When.** 2026-09-08.
 
+### A prompt that scoped the parts narrowly and the done gate broadly
+
+- **What.** Task 1.4's prompt scoped Parts 1–4 to eight specific references, then made Part 5 and the verification demand "bring up the AppConfig path using ONLY committed configuration — paste every service answering." Those are inconsistent: full reproducibility needs more than those eight.
+- **What the builder did with it.** Fixed the eight, brought up the two services those eight actually serve, and reported plainly that the rest is unreachable and why — rather than silently widening scope, or claiming the gate was met on two services out of six. Both alternatives would have been worse, and this is the third task in a row where the failure was in the prompt rather than the work.
+- **The reason the gap exists, which neither of us named at the time.** The missing references are `ANTHROPIC_API_KEY_SECRET_REF`, `TAVILY_API_KEY_SECRET_REF` and `BROWSERBASE_API_KEY_REFERENCE` — **vendor keys for accounts that do not exist yet.** Tavily and Browserbase were never purchased. So those services cannot be reproducible from committed configuration until Phase 1's remaining purchases happen. It is a dependency, not an oversight, and scoping it as one would have been wrong.
+- **The lesson.** A done gate has to be reachable inside the scope the same prompt sets. Writing an ambitious gate does not make the work larger; it makes the report dishonest, unless the builder is willing to say so.
+- **When.** 2026-09-08, task 1.4.
+
+### A stale comment that was tested rather than believed
+
+- **What.** Committed configuration carried a comment claiming LocalStack 4.14.0 rejects path-style SSM names on `GetParameter`, which is why `ALTER_ARTIFACTS_BUCKET_PARAM` used a flat name diverging from real AWS. The 1.4 builder tested it against the running version: path-style works on both put and get. The comment was stale, and the divergence it justified was unnecessary.
+- **Why it matters.** A comment explaining why something diverges from the obvious shape is the most expensive kind to leave stale — it actively defends the divergence, and everyone who reads it stops asking. Cheap to test, and this one had been protecting a wrong committed value.
+- **When.** 2026-09-08.
+
 ### PR #89 — a red PR holding a correct diagnosis
 
 - **What.** Opened 29 August with correct diagnoses of seven defects. It went red on CI,

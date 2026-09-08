@@ -118,7 +118,13 @@ false readings.
       unconditionally and makes every mock-space stored vector stale. *Prompt ready
       [`prompts/revive-13-appconfig.md`](prompts/revive-13-appconfig.md) — needs an AWS
       AppConfig application, environment and profile to exist first.*
-- [~] **1.4 secrets plumbing — really: make the AppConfig path reproducible.** Task 1.3
+- [x] **1.4 secrets plumbing — CLOSED 2026-09-08 for the eight references it scoped.** All
+      eight now resolve against real AWS, verified by `scripts/check-reference-resolution.sh`
+      (names only, proven to fail, gated on credentials). audit-service and
+      cost-ledger-service come up from committed configuration alone. **The gateway services
+      still cannot** — they read Anthropic, Tavily and Browserbase references never committed,
+      and two of those vendors are unpurchased, so it is a dependency rather than a gap. See
+      **1.6**. Original scope: Task 1.3
       proved six services run under real AppConfig, but did it by hand-supplying reference
       values, because **only two of eight committed references resolve against real AWS**.
       Four point at resources that exist under a different name; cost-ledger's two point at
@@ -133,6 +139,15 @@ false readings.
       against the real provider. **Expect bad scores and treat them as signal, not
       failure** — first time these components have been measured against something that can
       tell right from wrong. Record every pre-provider score as void beforehand.
+
+- [ ] **1.6 [+] finish reproducibility for the gateway services.** audit-service and
+      cost-ledger-service bring up from committed configuration; model-gateway, tool-gateway,
+      sandbox-service and provisioning-service do not, because they read
+      `ANTHROPIC_API_KEY_SECRET_REF`, `TAVILY_API_KEY_SECRET_REF` and
+      `BROWSERBASE_API_KEY_REFERENCE` — none of which are committed, and two of which name
+      vendors that have not been purchased. **Blocked on those purchases, not on engineering.**
+      Until then the AppConfig path is reproducible for two services out of six, and saying
+      otherwise would be the kind of claim this project exists to stop making.
 
 **Done when** a 30-case golden set scores above zero for a real reason; a capability
 request for `underwater.basket.weaving` no longer matches a summarisation agent; and the
