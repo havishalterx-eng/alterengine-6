@@ -31,6 +31,7 @@ from src.selection_binding import (
     BindAgentModelToolRequest,
     BindAgentModelToolResponse,
     BindingContext,
+    EmbeddingResult,
     EmbeddingResultError,
     NoAgentMatch,
     SelectionBindingEngine,
@@ -39,6 +40,10 @@ from src.selection_binding import (
 SERVICE_ROOT = Path(__file__).parent.parent
 PGVECTOR_IMAGE = "pgvector/pgvector:pg16"
 
+# Model id the FakeEmbeddingClient reports; stored embedding_metadata carries
+# it so the provenance filter admits freshly-created rows.
+TEST_MODEL_ID = "test-embedding-v1"
+
 TENANT_A = "ten_018f47a5-7b2c-7d10-8f11-123456789abc"
 TENANT_B = "ten_028f47a5-7b2c-7d10-8f11-123456789abc"
 WORKSPACE_A = "ws_018f47a5-7b2c-7d10-8f11-123456789abc"
@@ -46,13 +51,19 @@ RUN_ID = "run_018f47a5-7b2c-7d10-8f11-123456789abc"
 
 
 class FakeEmbeddingClient:
-    def __init__(self, vector: Sequence[float]) -> None:
+    def __init__(
+        self,
+        vector: Sequence[float],
+        *,
+        model_id: str = TEST_MODEL_ID,
+    ) -> None:
         self.vector = vector
+        self.model_id = model_id
         self.calls: list[tuple[str, str]] = []
 
-    async def embed(self, *, tenant_id: str, text: str) -> Sequence[float]:
+    async def embed(self, *, tenant_id: str, text: str) -> EmbeddingResult:
         self.calls.append((tenant_id, text))
-        return self.vector
+        return EmbeddingResult(vector=self.vector, model_id=self.model_id)
 
 
 def vector(first: float, second: float = 0.0) -> list[float]:
@@ -297,7 +308,11 @@ WHERE a.id = :agent_id
         ]
         assert row["version_persona_description"] == row["persona_description"]
         assert row["capability_description"] == row["persona_description"]
-        assert row["embedding_metadata"] == {"dimensions": 512, "source": "PLAN-8"}
+        assert row["embedding_metadata"] == {
+            "dimensions": 512,
+            "source": "PLAN-8",
+            "model_id": TEST_MODEL_ID,
+        }
         assert float(row["similarity"]) == pytest.approx(1.0)
         assert json.loads(outcome.persona_json) == {
             "capability_profile": requirement.model_dump(exclude_none=True),

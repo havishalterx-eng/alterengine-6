@@ -1,5 +1,6 @@
 """Real-Postgres coverage for PLAN-7 selection and binding."""
 
+import json
 from collections.abc import AsyncGenerator, Generator, Sequence
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from src.selection_binding import (
     BindAgentModelToolResponse,
     BindingContext,
     BindingValidationError,
+    EmbeddingResult,
     EmbeddingResultError,
     NoAgentMatch,
     SelectionBindingEngine,
@@ -29,6 +31,12 @@ from src.selection_binding import (
 
 SERVICE_ROOT = Path(__file__).parent.parent
 PGVECTOR_IMAGE = "pgvector/pgvector:pg16"
+
+# The model identifier the FakeEmbeddingClient reports for every vector it
+# produces. Seeded capability_embeddings rows carry this same model_id so the
+# provenance filter admits them; a row seeded with a different model_id is the
+# "stale vector" a Titan query must exclude.
+TEST_MODEL_ID = "test-embedding-v1"
 
 TENANT_A = "ten_018f47a5-7b2c-7d10-8f11-123456789abc"
 TENANT_B = "ten_028f47a5-7b2c-7d10-8f11-123456789abc"
@@ -44,13 +52,19 @@ PLATFORM_TENANT_ID = "ten_00000000-0000-7000-8000-000000000001"
 
 
 class FakeEmbeddingClient:
-    def __init__(self, vector: Sequence[float]) -> None:
+    def __init__(
+        self,
+        vector: Sequence[float],
+        *,
+        model_id: str = TEST_MODEL_ID,
+    ) -> None:
         self.vector = vector
+        self.model_id = model_id
         self.calls: list[tuple[str, str]] = []
 
-    async def embed(self, *, tenant_id: str, text: str) -> Sequence[float]:
+    async def embed(self, *, tenant_id: str, text: str) -> EmbeddingResult:
         self.calls.append((tenant_id, text))
-        return self.vector
+        return EmbeddingResult(vector=self.vector, model_id=self.model_id)
 
 
 class MutableRoutingPolicyClient:
@@ -139,6 +153,7 @@ async def seed_agent(
     tier: str = "STANDARD",
     status: str = "active",
     embedding: Sequence[float] | None = None,
+    model_id: str = TEST_MODEL_ID,
     published_versions: Sequence[int] = (1,),
     unpublished_versions: Sequence[int] = (),
 ) -> None:
@@ -182,9 +197,10 @@ VALUES (:agent_id, CAST(:tenant_id AS uuid), CAST(:workspace_id AS uuid), :name,
             text(
                 """
 INSERT INTO capability_embeddings
-  (id, agent_id, tenant_id, capability_description, embedding)
+  (id, agent_id, tenant_id, capability_description, embedding, embedding_metadata)
 VALUES
-  (:id, :agent_id, CAST(:tenant_id AS uuid), :description, CAST(:embedding AS vector(512)))
+  (:id, :agent_id, CAST(:tenant_id AS uuid), :description, CAST(:embedding AS vector(512)),
+   CAST(:metadata AS jsonb))
 """
             ),
             {
@@ -193,6 +209,7 @@ VALUES
                 "tenant_id": tenant_uuid,
                 "description": "text.generation analysis.reasoning",
                 "embedding": vector_literal(embedding),
+                "metadata": json.dumps({"model_id": model_id}),
             },
         )
 
@@ -235,9 +252,10 @@ VALUES (:agent_id, CAST(:tenant_id AS uuid), NULL, :name, :tier, 'active')
             text(
                 """
 INSERT INTO capability_embeddings
-  (id, agent_id, tenant_id, capability_description, embedding)
+  (id, agent_id, tenant_id, capability_description, embedding, embedding_metadata)
 VALUES
-  (:id, :agent_id, CAST(:tenant_id AS uuid), :description, CAST(:embedding AS vector(512)))
+  (:id, :agent_id, CAST(:tenant_id AS uuid), :description, CAST(:embedding AS vector(512)),
+   CAST(:metadata AS jsonb))
 """
             ),
             {
@@ -246,6 +264,7 @@ VALUES
                 "tenant_id": tenant_uuid,
                 "description": "text.generation analysis.reasoning",
                 "embedding": vector_literal(embedding),
+                "metadata": json.dumps({"model_id": TEST_MODEL_ID}),
             },
         )
 
@@ -877,3 +896,53 @@ class TestSelectionBindingIntegration:
         same_agent_wins_again = await engine.bind(request, context())
         assert isinstance(same_agent_wins_again, BindAgentModelToolResponse)
         assert same_agent_wins_again.agent_id == AGENT_A
+
+    async def test_stale_vector_from_a_different_model_is_excluded_from_candidacy(
+        self,
+        db_session: AsyncSession,
+    ) -> None:
+        """Task 1.3 Part B: a capability_embedding produced by a different
+        model must not be a candidate for a query vector from the current
+        model (fail-closed). Vectors live in the embedding space of whatever
+        produced them; a Titan query against a mock-space stored vector is
+        noise.
+
+        The query model is TEST_MODEL_ID (what FakeEmbeddingClient reports).
+        AGENT_A's stored vector is seeded with a *different* model_id
+        ("mock-space"), so it must be excluded and the bind must no-match.
+        """
+        await seed_agent(
+            db_session,
+            agent_id=AGENT_A,
+            embedding=vector(1.0),
+            model_id="mock-embedding-v0",
+        )
+        engine = SelectionBindingEngine(db_session, FakeEmbeddingClient(vector(1.0)))
+        request = request_for(NodeRequirement(capabilities=["text.generation"]))
+
+        outcome = await engine.bind(request, context())
+
+        # No persona_creation_engine is wired, so an excluded candidate
+        # surfaces as a genuine no-eligible-agent no-match rather than a bind.
+        assert isinstance(outcome, NoAgentMatch)
+        assert outcome.reason == "no_eligible_agent"
+
+    async def test_same_model_vector_is_still_a_candidate(
+        self,
+        db_session: AsyncSession,
+    ) -> None:
+        """The provenance filter must not be too broad: a stored vector from
+        the *same* model as the query is still a candidate and binds."""
+        await seed_agent(
+            db_session,
+            agent_id=AGENT_A,
+            embedding=vector(1.0),
+            model_id=TEST_MODEL_ID,
+        )
+        engine = SelectionBindingEngine(db_session, FakeEmbeddingClient(vector(1.0)))
+        request = request_for(NodeRequirement(capabilities=["text.generation"]))
+
+        outcome = await engine.bind(request, context())
+
+        assert isinstance(outcome, BindAgentModelToolResponse)
+        assert outcome.agent_id == AGENT_A

@@ -11,17 +11,31 @@ async gRPC convention (see ads_client/client.py's GrpcAdsClient).
 """
 
 from collections.abc import Sequence
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, NamedTuple, Protocol, runtime_checkable
 
 from src.m2m_auth import AccessTokenProvider
 
 CAPABILITY_QUERY_DIMENSIONS = 512
 
 
+class EmbeddingResult(NamedTuple):
+    """A capability-query embedding and the model that produced it.
+
+    model_id is the identifier the Embed RPC returned (EmbedResponse.model_id,
+    field 3 of alter.modelgw.v1.EmbedResponse). It is recorded on every stored
+    capability_embeddings row so selection can fail closed: a query vector is
+    only ever compared against stored vectors produced by the same model,
+    because vectors live in the embedding space of whatever produced them.
+    """
+
+    vector: Sequence[float]
+    model_id: str
+
+
 @runtime_checkable
 class EmbeddingClient(Protocol):
-    async def embed(self, *, tenant_id: str, text: str) -> Sequence[float]:
-        """Return one 512-dimensional capability-query vector."""
+    async def embed(self, *, tenant_id: str, text: str) -> EmbeddingResult:
+        """Return one 512-dimensional capability-query vector and its model."""
         ...
 
 
@@ -39,7 +53,7 @@ class NotImplementedEmbeddingClient:
     calls this and works today regardless.
     """
 
-    async def embed(self, *, tenant_id: str, text: str) -> Sequence[float]:
+    async def embed(self, *, tenant_id: str, text: str) -> EmbeddingResult:
         raise EmbeddingTransportUnavailableError(
             "Python-to-EmbeddingProvider transport is not configured for this "
             "deployment -- only preferred_agent_id-based binding is available"
@@ -73,7 +87,7 @@ class GrpcEmbeddingClient:
     async def close(self) -> None:
         await self._channel.close()
 
-    async def embed(self, *, tenant_id: str, text: str) -> Sequence[float]:
+    async def embed(self, *, tenant_id: str, text: str) -> EmbeddingResult:
         try:
             kwargs: dict[str, object] = {
                 "timeout": self._timeout_seconds,
@@ -92,7 +106,10 @@ class GrpcEmbeddingClient:
             raise EmbeddingTransportUnavailableError(
                 "Embed RPC call to Model Gateway failed"
             ) from exc
-        return tuple(response.embedding)
+        return EmbeddingResult(
+            vector=tuple(response.embedding),
+            model_id=response.model_id,
+        )
 
 
 def _load_grpc_bindings() -> tuple[Any, Any, Any]:

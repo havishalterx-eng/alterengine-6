@@ -1,4 +1,4 @@
-from src.selection_binding.embedding_client import EmbeddingClient
+from src.selection_binding.embedding_client import EmbeddingClient, EmbeddingResult
 from src.selection_binding.engine import (
     BindingValidationError,
     EmbeddingResultError,
@@ -21,6 +21,7 @@ __all__ = [
     "BindingOutcome",
     "BindingValidationError",
     "EmbeddingClient",
+    "EmbeddingResult",
     "EmbeddingResultError",
     "NoAgentMatch",
     "NoMatchReason",
