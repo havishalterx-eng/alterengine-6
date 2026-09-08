@@ -135,7 +135,11 @@ false readings.
       configuration alone. **Convention for anything new: `/alter/<env>/<service>/<kebab-case>`.**
       *Prompt ready [`prompts/revive-14-secrets-plumbing.md`](prompts/revive-14-secrets-plumbing.md)
       — needs `secretsmanager:CreateSecret` granted first.*
-- [ ] **1.5 re-run everything — the point of the phase.** Re-run the eval golden sets
+- [~] **1.5 re-run everything — the point of the phase.** Bedrock is **already** the model
+      provider under appconfig; the work is binding the four aliases (`FAST`, `STANDARD`,
+      `ADVANCED`, `CEILING`) to real model ids, all starting on `qwen.qwen3-32b-v1:0` so the
+      first numbers measure the engine rather than a tier-mapping guess. *Prompt ready
+      [`prompts/revive-15-real-model-golden-sets.md`](prompts/revive-15-real-model-golden-sets.md).* Re-run the eval golden sets
       against the real provider. **Expect bad scores and treat them as signal, not
       failure** — first time these components have been measured against something that can
       tell right from wrong. Record every pre-provider score as void beforehand.
@@ -382,6 +386,14 @@ demo.
       state, not real behaviour); and **some port defaults are sandbox values, not committed
       ones**, so on a machine using committed ports those checks fail for the wrong reason.
       Fix both, then join the four `scripts/check-*.sh` gates in CI's `gate` job.
+- [ ] **C20 the fallback chain cannot express a working provider.**
+      `FallbackProviderSchema` is `z.enum(["anthropic", "openai"])`, so a fallback may only
+      name Anthropic or OpenAI. Anthropic is out of scope by decision, and OpenAI-on-Bedrock
+      returned no text when tested. The primary `model_id` is a free string and takes any
+      Bedrock model, so **only the fallback is constrained** — and it is currently
+      unusable. The question is not whether to add a member: it is whether a *provider* enum
+      is the right shape when the primary is addressed by model id. Decide the shape, not the
+      contents.
 - [ ] **C19 tenant-id format drift, now in AWS resource names.** Tavily integration secrets
       exist under four shapes for what looks like one tenant: a bare UUID, two `ten_`-prefixed
       variants, and `ten_test0000…`. Same drift as the Cost Ledger tenancy split, except
