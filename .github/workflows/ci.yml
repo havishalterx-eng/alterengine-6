@@ -84,6 +84,16 @@ jobs:
       - name: placeholder marker check
         run: scripts/check-placeholder-markers.sh
 
+      - name: env-local bootstrap check
+        # Project Revive task C21. Proves `scripts/bootstrap-env-local.sh`
+        # turns .env.local.example into a sourceable, consistent .env.local
+        # (no leftover <placeholder>, INTERNAL_SERVICE_TOKEN_SHA256 agrees
+        # with the token, passwords propagated into every connection string,
+        # ADS_DB_PASSWORD=ads_core_local, MEMORY_DB_PASSWORD non-empty). Runs
+        # in --check mode: generates to a temp file, verifies, never touches
+        # the real .env.local. Fails the gate if the bootstrap regresses.
+        run: scripts/bootstrap-env-local.sh --check
+
       - name: migration rollback pairing check
         run: scripts/check-migration-rollback-pairing.sh
 
