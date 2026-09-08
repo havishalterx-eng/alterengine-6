@@ -362,6 +362,22 @@ Every entry: **What / Why / How / When / Where.**
 - **When.** 2026-09-08, task 1.2.
 - **Where.** `capability_embeddings`, `apps/intelligence-service/src/selection_binding/engine.py`.
 
+### Task 3.3 inherits a trap from 3.0's key scope
+
+- **What.** 3.0's idempotency key is a hash of the sorted **capability set only** — tier is deliberately excluded. Tier is hardcoded `STANDARD` today, so that is correct today.
+- **The trap.** When 3.3 makes tier vary, a `PREMIUM` request for a capability set that already has a `STANDARD` agent will hit the same key and **silently return the STANDARD agent** — the exact class of defect 3.0 was fixing, reintroduced through a different door. Nothing will error; the caller gets a usable binding to an agent of the wrong tier.
+- **Why the key was scoped this way anyway.** Including tier now would put a hardcoded constant inside a hash, making the key appear to encode something it does not. The migration cost is symmetric either way, so it was decided on correctness rather than on avoiding future work. Whether a `STANDARD` and a `PREMIUM` agent for one capability set are one agent or two is a genuine product question that belongs with 3.3, not a guess made blind in 3.0.
+- **What 3.3 must do.** Decide that question explicitly, and if tier belongs in the key, migrate the partial unique index with it.
+- **When.** 2026-09-08.
+- **Where.** `apps/intelligence-service/src/agent_auto_creation/engine.py`, `_idempotency_key`.
+
+### Builders edited the CEO-owned documents
+
+- **What.** Task 3.0's PR modified `docs/checklist.md` and `docs/memoryalter.md`, described in its report as "docs updated per repo convention."
+- **Why it matters.** `memoryalter.md`'s own rules say only the CEO session writes these files; builders read them and report. The record is append-only and dated for a reason — if builders edit it, "what we decided" and "what a builder believed we decided" become indistinguishable, which is precisely the ambiguity the file exists to remove.
+- **The honest half.** No master prompt has ever stated this constraint. It was reachable — the rule sits in a file they were told to read — but it was never an instruction. **The prompt template is at fault, not the builder.** Fixed by adding the constraint to every future prompt.
+- **When.** 2026-09-08, task 3.0.
+
 ### PR #89 — a red PR holding a correct diagnosis
 
 - **What.** Opened 29 August with correct diagnoses of seven defects. It went red on CI,
