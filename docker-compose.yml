@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: platform_api
       POSTGRES_PASSWORD: ${PLATFORM_DB_PASSWORD:?Set PLATFORM_DB_PASSWORD in .env.local}
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${PLATFORM_DB_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U platform_api -d platform_db"]
       interval: 5s
@@ -34,7 +34,7 @@ services:
       POLICY_SYSTEM_WRITER_PASSWORD: ${POLICY_SYSTEM_WRITER_PASSWORD:-}
       INTELLIGENCE_DRIFT_READER_PASSWORD: ${INTELLIGENCE_DRIFT_READER_PASSWORD:-}
     ports:
-      - "127.0.0.1:5433:5432"
+      - "127.0.0.1:${ENGINE_DB_PORT:-5433}:5432"
     healthcheck:
       test:
         [
@@ -59,7 +59,7 @@ services:
       POSTGRES_PASSWORD: ads_core_local
       ADS_DELETION_DB_PASSWORD: ads_deletion_local
     ports:
-      - "127.0.0.1:5434:5432"
+      - "127.0.0.1:${ADS_DB_PORT:-5434}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ads_core -d ads_db"]
       interval: 5s
@@ -87,7 +87,7 @@ services:
       POSTGRES_USER: cost_ledger_service
       POSTGRES_PASSWORD: ${COST_DB_PASSWORD:?Set COST_DB_PASSWORD in .env.local}
     ports:
-      - "127.0.0.1:5435:5432"
+      - "127.0.0.1:${COST_DB_PORT:-5435}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U cost_ledger_service -d cost_db"]
       interval: 5s
@@ -100,7 +100,7 @@ services:
     image: redis:7.4.2-alpine
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -137,7 +137,7 @@ services:
       DELETION_SERVICE_TOKEN_REF: ${DELETION_SERVICE_TOKEN_REF:-alter/local/audit-service/deletion-service-token}
       DELETION_PSEUDONYM_KEY_REF: ${DELETION_PSEUDONYM_KEY_REF:-alter/local/audit-service/deletion-pseudonym-key}
     ports:
-      - "127.0.0.1:4566:4566"
+      - "127.0.0.1:${LOCALSTACK_PORT:-4566}:4566"
     healthcheck:
       test:
         [
@@ -169,8 +169,8 @@ services:
         "--ui-disable-news-fetch",
       ]
     ports:
-      - "127.0.0.1:7233:7233"
-      - "127.0.0.1:8233:8233"
+      - "127.0.0.1:${TEMPORAL_PORT:-7233}:7233"
+      - "127.0.0.1:${TEMPORAL_UI_PORT:-8233}:8233"
     healthcheck:
       test:
         [
@@ -194,9 +194,9 @@ services:
       - ./infrastructure/local/tempo.yaml:/etc/tempo/tempo.yaml:ro
       - tempo_data:/var/tempo
     ports:
-      - "127.0.0.1:3200:3200"
-      - "127.0.0.1:4317:4317"
-      - "127.0.0.1:4318:4318"
+      - "127.0.0.1:${TEMPO_PORT:-3200}:3200"
+      - "127.0.0.1:${TEMPO_OTLP_GRPC_PORT:-4317}:4317"
+      - "127.0.0.1:${TEMPO_OTLP_HTTP_PORT:-4318}:4318"
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3200/ready"]
       interval: 5s
@@ -210,7 +210,7 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
     ports:
-      - "127.0.0.1:3300:3000"
+      - "127.0.0.1:${GRAFANA_PORT:-3300}:3000"
     volumes:
       - ./infrastructure/local/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
     depends_on:
@@ -220,7 +220,7 @@ services:
   presidio-analyzer:
     image: mcr.microsoft.com/presidio-analyzer:2.2.360
     ports:
-      - "127.0.0.1:5001:3000"
+      - "127.0.0.1:${PRESIDIO_ANALYZER_PORT:-5001}:3000"
     # The Presidio images ship neither wget nor curl, so the usual HTTP probe
     # can never pass. They are Python images, so probe with the interpreter
     # that is guaranteed to be present.
@@ -240,7 +240,7 @@ services:
   presidio-anonymizer:
     image: mcr.microsoft.com/presidio-anonymizer:2.2.360
     ports:
-      - "127.0.0.1:5002:3000"
+      - "127.0.0.1:${PRESIDIO_ANONYMIZER_PORT:-5002}:3000"
     # The Presidio images ship neither wget nor curl, so the usual HTTP probe
     # can never pass. They are Python images, so probe with the interpreter
     # that is guaranteed to be present.

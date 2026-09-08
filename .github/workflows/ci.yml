@@ -94,6 +94,19 @@ jobs:
         # the real .env.local. Fails the gate if the bootstrap regresses.
         run: scripts/bootstrap-env-local.sh --check
 
+      - name: stack health script drift check
+        # Project Revive task C16. The full verify-local-stack-health.sh
+        # needs a running docker stack, which the gate job does not have, so
+        # it runs wherever a stack is up (developer machines; the C16
+        # coexistence proof). THIS step is the driver CI can run without a
+        # stack: it sh -n's the health script, asserts no dependency host
+        # port in docker-compose.yml is a bare literal, and asserts every
+        # compose ${*_PORT:-default} is read by the health script with the
+        # same name -- so the two sources cannot drift. If someone adds a
+        # port to compose but forgets the health script (the exact failure
+        # C16 fixes), this fails the gate.
+        run: scripts/check-stack-health-script.sh
+
       - name: migration rollback pairing check
         run: scripts/check-migration-rollback-pairing.sh
 
