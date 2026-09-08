@@ -87,8 +87,8 @@ export function loadAuditEnvironment(
     );
   }
 
-  // audit-service is the only service reading "local-file" here; the others
-  // accept appconfig|mock, so one shared value cannot satisfy both.
+  // Services declare their own accepted values and read a service-scoped
+  // variable first, with the shared value as a fallback.
   const configSource = requireScopedValue(environment, "AUDIT_CONFIG_SOURCE", "ALTER_CONFIG_SOURCE");
   if (!CONFIG_SOURCES.includes(configSource as AuditEnvironment["configSource"])) {
     throw new AuditConfigurationError(

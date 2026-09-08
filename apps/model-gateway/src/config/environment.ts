@@ -26,6 +26,7 @@ export interface ModelGatewayAppConfigEnvironment
   readonly platformAdminServiceTokenSecretReference: string;
   readonly providerControlParameterName: string;
   readonly modelPolicyOverrideParameterName: string;
+  readonly bedrockRuntimeEndpoint?: string;
 }
 
 export interface ModelGatewayMockEnvironment
@@ -142,6 +143,24 @@ export function loadModelGatewayEnvironment(
     return { ...baseEnvironment, configSource: "mock" };
   }
 
+  const bedrockRuntimeEndpoint = environment.AWS_ENDPOINT_URL_BEDROCK_RUNTIME?.trim();
+  if (environment.AWS_ENDPOINT_URL?.trim() && !bedrockRuntimeEndpoint) {
+    throw new ModelGatewayConfigurationError(
+      "AWS_ENDPOINT_URL_BEDROCK_RUNTIME",
+      "is required when AWS_ENDPOINT_URL is set so Bedrock does not use that endpoint",
+    );
+  }
+  if (bedrockRuntimeEndpoint) {
+    try {
+      new URL(bedrockRuntimeEndpoint);
+    } catch {
+      throw new ModelGatewayConfigurationError(
+        "AWS_ENDPOINT_URL_BEDROCK_RUNTIME",
+        "must be an absolute URL",
+      );
+    }
+  }
+
   return {
     ...baseEnvironment,
     configSource: "appconfig",
@@ -185,5 +204,8 @@ export function loadModelGatewayEnvironment(
     modelPolicyOverrideParameterName:
       environment.MODEL_POLICY_OVERRIDE_PARAMETER_NAME?.trim() ||
       `/alter/${alterEnvironment}/model-gateway/model-policy`,
+    ...(bedrockRuntimeEndpoint === undefined
+      ? {}
+      : { bedrockRuntimeEndpoint }),
   };
 }

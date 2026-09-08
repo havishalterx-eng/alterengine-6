@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
+import { platformApiConfigSource } from "../config/env.schema";
 import { sharedPool } from "../db/shared-pool";
 import { CONFIG_PROVIDER, type ConfigProvider } from "./config-provider.interface";
 import { AppConfigConfigProvider } from "./adapters/appconfig/appconfig-config-provider";
@@ -30,7 +31,7 @@ const ENTITLEMENT_STORE = Symbol("ENTITLEMENT_STORE");
       inject: [PLAN_DEFINITION_STORE],
       useFactory: (planDefinitions: PlanDefinitionStore): ConfigProvider => {
         const baseline =
-          process.env.ALTER_CONFIG_SOURCE === "appconfig"
+          platformApiConfigSource(process.env) === "appconfig"
             ? new AppConfigConfigProvider({
                 applicationIdentifier: process.env.APPCONFIG_APP_ID!,
                 environmentIdentifier: process.env.APPCONFIG_ENV_ID!,

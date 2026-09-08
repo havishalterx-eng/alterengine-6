@@ -48,6 +48,20 @@ describe("platformApiEnvSchema", () => {
     });
   });
 
+  it("prefers PLATFORM_API_CONFIG_SOURCE over ALTER_CONFIG_SOURCE", () => {
+    expect(
+      validatePlatformApiEnv({
+        DATABASE_URL: "postgres://platform_api:platform_api_local@localhost:5432/platform_db",
+        MARKETPLACE_DATABASE_URL:
+          "postgres://platform_api:platform_api_local@localhost:5432/marketplace_db",
+        MARKETPLACE_SEARCH_CURSOR_SECRET: cursorSecret,
+        ACTOR_TOKEN_SIGNING_KEY_REF: "env:ACTOR_TOKEN_PRIVATE_KEY",
+        ALTER_CONFIG_SOURCE: "mock",
+        PLATFORM_API_CONFIG_SOURCE: "local-file",
+      }).ALTER_CONFIG_SOURCE,
+    ).toBe("local-file");
+  });
+
   it("requires Auth0 refs when Auth0 provider is selected", () => {
     expect(() =>
       validatePlatformApiEnv({

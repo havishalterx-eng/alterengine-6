@@ -172,7 +172,12 @@ function createEmbeddingProvider(
   if (environment.configSource === "mock") {
     return createMockEmbeddingProvider();
   }
-  return new TitanEmbeddingProvider({ region: environment.region });
+  return new TitanEmbeddingProvider({
+    region: environment.region,
+    ...(environment.bedrockRuntimeEndpoint === undefined
+      ? {}
+      : { endpoint: environment.bedrockRuntimeEndpoint }),
+  });
 }
 
 function createCacheProvider(
