@@ -85,7 +85,11 @@ false readings.
 - [ ] **1.2 embeddings — the quieter half.** Wire `TitanEmbeddingProvider`
       (`amazon.titan-embed-text-v2:0`) behind model-gateway's `Embed` RPC. Do not skip:
       Selection & Binding and Agent Auto-Creation both depend on it, and both currently
-      return nonsense that looks like success.
+      return nonsense that looks like success. **Two traps:** the caller must pass
+      `dimensions: 512` or the DB insert fails at a distance from the cause, and
+      `healthCheck()` returns healthy without probing anything (`liveProbe: false`).
+      *Prompt ready [`prompts/revive-12-titan-embeddings.md`](prompts/revive-12-titan-embeddings.md)
+      — needs Titan access granted and 1.0 finished.*
 - [ ] **1.3 AppConfig configuration.** Switch `ALTER_CONFIG_SOURCE` from mock to
       `appconfig`; create the AppConfig application, environment and profile. Every service
       validates this value, so it is all-or-nothing across all of them in one pass.
