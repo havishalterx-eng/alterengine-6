@@ -291,6 +291,27 @@ Every entry: **What / Why / How / When / Where.**
 - **When.** Assessment run, 4–6 September 2026.
 - **Where.** Selection & Binding candidate query; the shared local mock provider.
 
+### Real Titan embeddings fix discrimination, and the existing threshold is sound
+
+- **What.** Measured live against Bedrock Titan v2 in `ap-south-1`, 512 dimensions, normalized, before any code was wired. Capability-string to capability-string, which is what the system actually compares:
+
+  | capability | mock | real | threshold 0.6 |
+  |---|---|---|---|
+  | `text.summarisation` (relevant) | 0.8703 | **0.8600** | MATCH |
+  | `underwater.basket.weaving` | **0.8740** | **0.1214** | no-match |
+  | `quantum.teleportation` | 0.8499 | **0.0757** | no-match |
+
+  Nonsense went from outscoring the relevant capability to sitting seven times below it.
+
+- **Why it matters.** Phase 1's second done gate is provably achievable before a builder touches anything. It also settles a question the action plan left open: task 3.1 says "add the filter, then **re-tune the similarity threshold against real embeddings**." **No re-tuning is needed.** `minimum_capability_similarity: float = 0.6` at `selection_binding/engine.py:223` separates 0.86 from 0.12 cleanly.
+
+- **How.** Four `bedrock-runtime invoke-model` calls, cosine similarity computed directly. Verified that both sides embed the same shape — `"\n".join(requirement.capabilities)` at `selection_binding/engine.py:273` and the same join in `agent_auto_creation/engine.py` — so the comparison is symmetric.
+
+- **A trap this surfaced, recorded before anyone hits it.** A first pass compared a capability string against a **prose persona description** and scored the genuinely relevant capability at **0.5609 — below the threshold**. That is not how the system works today, and the 0.5609 figure should not be quoted as a system measurement. But it means the 0.6 threshold is calibrated for capability-to-capability text only: **if anything ever embeds a persona description, a summary, or free prose on either side of this comparison, matching silently stops working.** Nothing would fail loudly; agents would simply stop being found.
+
+- **When.** 2026-09-08, during task 1.1 credential verification.
+- **Where.** `packages/adapters/src/aws/titan-embedding-provider.ts`, `apps/intelligence-service/src/selection_binding/engine.py:223,273`.
+
 ### PR #89 — a red PR holding a correct diagnosis
 
 - **What.** Opened 29 August with correct diagnoses of seven defects. It went red on CI,
