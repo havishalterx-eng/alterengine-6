@@ -19,10 +19,13 @@ from alembic import command
 from src.config import get_settings
 from src.db.session import get_db_session
 from src.main import app
+from src.selection_binding import EmbeddingResult
 from src.selection_binding.router import get_embedding_client
 
 SERVICE_ROOT = Path(__file__).parent.parent
 PGVECTOR_IMAGE = "pgvector/pgvector:pg16"
+
+TEST_MODEL_ID = "test-embedding-v1"
 
 TENANT_A = "ten_018f47a5-7b2c-7d10-8f11-123456789abc"
 WORKSPACE_A = "ws_018f47a5-7b2c-7d10-8f11-123456789abc"
@@ -38,8 +41,8 @@ class FakeEmbeddingClient:
     def __init__(self, vector: Sequence[float]) -> None:
         self.vector = vector
 
-    async def embed(self, *, tenant_id: str, text: str) -> Sequence[float]:
-        return self.vector
+    async def embed(self, *, tenant_id: str, text: str) -> EmbeddingResult:
+        return EmbeddingResult(vector=self.vector, model_id=TEST_MODEL_ID)
 
 
 def vector(first: float) -> list[float]:

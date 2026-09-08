@@ -1,6 +1,7 @@
 """Tenant-safe, performance-weighted agent selection for PLAN-7."""
 
 import json
+import logging
 import math
 import uuid
 from collections.abc import Sequence
@@ -25,6 +26,8 @@ from src.selection_binding.policy_client import RoutingPolicyClient
 
 if TYPE_CHECKING:
     from src.agent_auto_creation.models import CreatePersonaRequest, CreatePersonaResponse
+
+logger = logging.getLogger(__name__)
 
 
 class PersonaCreationEngine(Protocol):
@@ -149,6 +152,7 @@ WITH performance AS (
       ce.tenant_id = CAST(:tenant_id AS uuid)
       OR ce.tenant_id = CAST(:platform_tenant_id AS uuid)
     )
+    AND ce.embedding_metadata->>'model_id' = :embedding_model_id
     AND (
       a.workspace_id = CAST(:workspace_id AS uuid)
       OR a.tenant_id = CAST(:platform_tenant_id AS uuid)
@@ -199,6 +203,36 @@ FROM ranked
 WHERE combined_score >= :minimum_combined_score
 ORDER BY combined_score DESC, capability_similarity DESC, agent_id ASC
 LIMIT 1
+"""
+)
+
+# Counts capability_embeddings rows that belong to eligible agents for this
+# tenant/workspace but were excluded from candidacy by the provenance filter
+# (embedding_metadata->>'model_id' != the query model, or absent). Reported as
+# a log line so stale vectors are visible rather than silently dropped.
+_COUNT_STALE_EMBEDDINGS = text(
+    """
+SELECT count(*) AS stale_count
+FROM capability_embeddings AS ce
+JOIN agents AS a
+  ON a.tenant_id = ce.tenant_id
+ AND a.id = ce.agent_id
+WHERE (
+    a.tenant_id = CAST(:tenant_id AS uuid)
+    OR a.tenant_id = CAST(:platform_tenant_id AS uuid)
+  )
+  AND (
+    ce.tenant_id = CAST(:tenant_id AS uuid)
+    OR ce.tenant_id = CAST(:platform_tenant_id AS uuid)
+  )
+  AND (
+    a.workspace_id = CAST(:workspace_id AS uuid)
+    OR a.tenant_id = CAST(:platform_tenant_id AS uuid)
+  )
+  AND a.status IN ('active', 'draft')
+  AND (
+    ce.embedding_metadata->>'model_id' IS DISTINCT FROM :embedding_model_id
+  )
 """
 )
 
@@ -269,11 +303,11 @@ class SelectionBindingEngine:
                 reason="agent_not_required",
             )
 
-        raw_embedding = await self._embedding_client.embed(
+        embedding_result = await self._embedding_client.embed(
             tenant_id=request.tenant_id,
             text="\n".join(requirement.capabilities),
         )
-        query_embedding = embedding_vector_literal(raw_embedding)
+        query_embedding = embedding_vector_literal(embedding_result.vector)
         similarity_weight = await self._load_similarity_weight(request.tenant_id)
         result = await self._session.execute(
             _RANKED_AGENT_QUERY,
@@ -285,6 +319,7 @@ class SelectionBindingEngine:
                 "node_type": context.node_type,
                 "task_category": context.task_category,
                 "query_embedding": query_embedding,
+                "embedding_model_id": embedding_result.model_id,
                 "similarity_weight": similarity_weight,
                 "performance_weight": 1.0 - similarity_weight,
                 "minimum_capability_similarity": self._minimum_capability_similarity,
@@ -292,6 +327,11 @@ class SelectionBindingEngine:
             },
         )
         candidate = result.mappings().first()
+        await self._report_stale_embeddings(
+            tenant_uuid=tenant_uuid,
+            workspace_uuid=workspace_uuid,
+            embedding_model_id=embedding_result.model_id,
+        )
         if candidate is None:
             no_match = NoAgentMatch(
                 node_key=request.node_key,
@@ -307,6 +347,45 @@ class SelectionBindingEngine:
             )
 
         return _response(candidate, requirement)
+
+    async def _report_stale_embeddings(
+        self,
+        *,
+        tenant_uuid: str,
+        workspace_uuid: str,
+        embedding_model_id: str,
+    ) -> None:
+        """Log how many capability_embeddings rows were excluded as stale.
+
+        A row is stale when its recorded model_id differs from the model that
+        produced this query vector (or is absent -- pre-provenance rows). Such
+        vectors live in a different embedding space and would otherwise match
+        as noise, so they are excluded from candidacy and reported here.
+        """
+        try:
+            result = await self._session.execute(
+                _COUNT_STALE_EMBEDDINGS,
+                {
+                    "tenant_id": tenant_uuid,
+                    "workspace_id": workspace_uuid,
+                    "platform_tenant_id": PLATFORM_TENANT_ID,
+                    "embedding_model_id": embedding_model_id,
+                },
+            )
+            stale_count = int(result.scalar_one())
+        except Exception:  # pragma: no cover - reporting must never break binding
+            logger.warning(
+                "selection_binding: could not count stale embeddings for model %s",
+                embedding_model_id,
+            )
+            return
+        if stale_count > 0:
+            logger.info(
+                "selection_binding: excluded %d stale capability embedding(s) "
+                "produced by a different model than %s",
+                stale_count,
+                embedding_model_id,
+            )
 
     async def _create_and_bind(
         self,
