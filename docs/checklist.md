@@ -176,6 +176,11 @@ binding from an incorrect one.
 - [ ] **3.3 auto-creation tier** — from decision 0.3 (design log §31). Never create an agent
       that cannot satisfy the requirement that triggered it: above the configured ceiling,
       **fail the bind with a named reason**. Ceiling is config, default `STANDARD`.
+      **Inherits a trap from 3.0:** the idempotency key hashes the capability set only, so
+      once tier varies, a `PREMIUM` request for a capability set that already has a
+      `STANDARD` agent hits the same key and **silently returns the STANDARD agent** — no
+      error, a usable binding to the wrong tier. Decide explicitly whether tier belongs in
+      the key, and migrate the partial unique index with it if so.
 - [ ] **3.4 capability resolver** — independent. Advanced-tier terms are tested before
       fast-tier ones in a plain if/elif, so an incidental adjective decides the tier.
       Replace set membership with something that reads the request.
@@ -384,7 +389,11 @@ demo.
    red. "Nothing to check here" must be argued in the report, never assumed by silence.
 5. **Never delete branches. Never force-push.**
 6. **Never write to `alter-x-4-`.** Frozen, reference-only. Every artefact belongs here.
-7. **Grade review depth by blast radius.** Model Gateway has five direct dependents; a
+7. **Builders never edit `memoryalter.md`, `checklist.md` or `progress.md`.** The CEO session
+   writes them; builders read them and report. Otherwise "what we decided" and "what a
+   builder believed we decided" stop being distinguishable — which is the ambiguity these
+   files exist to remove. Every master prompt must say so.
+8. **Grade review depth by blast radius.** Model Gateway has five direct dependents; a
    read-only registry does not.
-8. **Record pre-provider scores as void before Phase 1 lands.** The first honest measurement
+9. **Record pre-provider scores as void before Phase 1 lands.** The first honest measurement
    will look like a regression, and someone will read it as one.
