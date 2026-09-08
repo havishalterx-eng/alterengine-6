@@ -18,6 +18,33 @@ cp .env.local.example .env.local
 Replace every angle-bracket placeholder in `.env.local` with a local-only,
 shell-safe value. Never commit `.env.local`.
 
+### Or: let the bootstrap do it (recommended)
+
+`.env.local.example` cannot be sourced as-is — 25 uncommented lines carry
+`<placeholder>` values and bash reads `<` as a redirect, so
+`set -a; . .env.local.example` dies on line 11. `scripts/bootstrap-env-local.sh`
+turns it into a sourceable `.env.local` in one step: it generates the six
+database passwords, the `INTERNAL_SERVICE_TOKEN` and its SHA-256 (kept
+consistent), and the marketplace cursor secret; propagates each password
+into every connection string that interpolates it; resolves the two
+placeholders the example references but never defines
+(`ADS_DB_PASSWORD=ads_core_local` from the `ads-db` compose service,
+`MEMORY_DB_PASSWORD=$AUDIT_DB_PASSWORD` from `engine-db-init.sh`); and never
+clobbers an existing `.env.local` (use `--merge` to fill missing values while
+preserving real AWS/Auth0 settings).
+
+```bash
+scripts/bootstrap-env-local.sh          # create ./.env.local (refuses if one exists)
+scripts/bootstrap-env-local.sh --merge   # fill placeholders in an existing .env.local, keep real values
+```
+
+It is idempotent: re-running `--merge` does not regenerate passwords a
+running database was already created with. If a stack has already run and
+the Postgres volumes hold roles created with an old password, a first-time
+bootstrap refuses and names the stale-volume trap rather than letting it
+surface later as an authentication error. CI runs `scripts/bootstrap-env-local.sh --check`
+on every PR to keep the bootstrap honest.
+
 ### Config source: mock is the default; AppConfig is a documented opt-in
 
 The committed `.env.local.example` default is `ALTER_CONFIG_SOURCE=mock`, and
