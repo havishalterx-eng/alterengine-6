@@ -413,6 +413,23 @@ Every entry: **What / Why / How / When / Where.**
 - **Why it matters.** A comment explaining why something diverges from the obvious shape is the most expensive kind to leave stale — it actively defends the divergence, and everyone who reads it stops asking. Cheap to test, and this one had been protecting a wrong committed value.
 - **When.** 2026-09-08.
 
+### Bedrock model availability in ap-south-1, measured 2026-09-09
+
+- **What.** `bedrock:ListFoundationModels` works for `alterengine.dev`. Many text models are listed. Invocability was tested directly through the Converse API — the same call the adapter makes — rather than inferred from the listing.
+
+  | model | bare-modelId Converse | strict 9-key JSON at temp 0 |
+  |---|---|---|
+  | `qwen.qwen3-32b-v1:0` | works | 9 keys, none missing, none extra |
+  | `deepseek.v3.2` | works | 9 keys, none missing, none extra |
+  | `mistral.mistral-large-3-675b-instruct` | works | 9 keys, none missing, none extra |
+  | `amazon.nova-2-lite-v1:0` | **fails** | not tested |
+  | `openai.gpt-oss-120b-1:0` | returns no text at that path | not tested |
+
+- **Nova needs an inference profile, not a model ID.** Verbatim: *"Invocation of model ID amazon.nova-2-lite-v1:0 with on-demand throughput isn't supported. Retry your request with the ID or ARN of an inference profile that contains this model."* The adapter passes `request.modelId` straight to Converse, so it can carry a profile ARN transparently — but the configuration has to know that some models are addressed by profile and others by id. Worth knowing before someone configures Nova and reads the error as an access problem.
+- **The JSON test is thin evidence and should not be over-read.** One prompt, one shot, temperature 0. It establishes that none of the three is obviously incapable of holding a strict contract — which is the bar for unblocking Phase 1, and nothing more. The eval harness and its thirty golden cases exist to answer the real question, and that is task 1.5's output rather than a judgement made here.
+- **A false negative I nearly reported.** The first pass showed mistral failing to produce JSON. The output began `{\n  "objective": ...` with a literal backslash-n — the AWS CLI's `--output text` escaping, not the model. Re-tested through the JSON response and it passed cleanly. Testing harnesses produce false negatives about the thing being tested, and a model's reputation is exactly the kind of claim that would have stuck.
+- **When.** 2026-09-09.
+
 ### PR #89 — a red PR holding a correct diagnosis
 
 - **What.** Opened 29 August with correct diagnoses of seven defects. It went red on CI,
