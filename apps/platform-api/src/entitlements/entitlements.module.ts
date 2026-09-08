@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
-import { platformApiConfigSource } from "../config/env.schema";
+import { platformApiConfigSource, validatePlatformApiEnv } from "../config/env.schema";
 import { sharedPool } from "../db/shared-pool";
 import { CONFIG_PROVIDER, type ConfigProvider } from "./config-provider.interface";
 import { AppConfigConfigProvider } from "./adapters/appconfig/appconfig-config-provider";
@@ -30,15 +30,18 @@ const ENTITLEMENT_STORE = Symbol("ENTITLEMENT_STORE");
       provide: CONFIG_PROVIDER,
       inject: [PLAN_DEFINITION_STORE],
       useFactory: (planDefinitions: PlanDefinitionStore): ConfigProvider => {
-        const baseline =
-          platformApiConfigSource(process.env) === "appconfig"
-            ? new AppConfigConfigProvider({
-                applicationIdentifier: process.env.APPCONFIG_APP_ID!,
-                environmentIdentifier: process.env.APPCONFIG_ENV_ID!,
-                configurationProfileIdentifier: process.env.APPCONFIG_PROFILE_ID!,
-              })
-            : new LocalFileConfigProvider();
-        return new PlanDefinitionConfigProvider(baseline, planDefinitions);
+        if (platformApiConfigSource(process.env) !== "appconfig") {
+          return new PlanDefinitionConfigProvider(new LocalFileConfigProvider(), planDefinitions);
+        }
+        const environment = validatePlatformApiEnv(process.env);
+        return new PlanDefinitionConfigProvider(
+          new AppConfigConfigProvider({
+            applicationIdentifier: environment.APPCONFIG_APP_ID!,
+            environmentIdentifier: environment.APPCONFIG_ENV_ID!,
+            configurationProfileIdentifier: environment.APPCONFIG_PROFILE_ID!,
+          }),
+          planDefinitions,
+        );
       },
     },
     {

@@ -18,6 +18,37 @@ cp .env.local.example .env.local
 Replace every angle-bracket placeholder in `.env.local` with a local-only,
 shell-safe value. Never commit `.env.local`.
 
+### Config source: mock is the default; AppConfig is a documented opt-in
+
+The committed `.env.local.example` default is `ALTER_CONFIG_SOURCE=mock`, and
+the scoped overrides `AUDIT_CONFIG_SOURCE=local-file` and
+`PLATFORM_API_CONFIG_SOURCE=local-file` stay as they are. This is deliberate:
+making AppConfig the committed local default would tax every developer with
+AWS credentials just to start the stack. Mock is the recommended local mode.
+
+**Running under real AWS AppConfig is an opt-in.** To prove a service runs
+against real AppConfig (not LocalStack), set `ALTER_CONFIG_SOURCE=appconfig`
+and provide the AppConfig identifiers the service reads from its own
+environment:
+
+- model-gateway, tool-gateway, sandbox-service read
+  `APPCONFIG_APPLICATION_ID`, `APPCONFIG_ENVIRONMENT_ID`,
+  `APPCONFIG_CONFIGURATION_PROFILE_ID`;
+- platform-api reads `APPCONFIG_APP_ID`, `APPCONFIG_ENV_ID`,
+  `APPCONFIG_PROFILE_ID` (validated by `env.schema.ts`).
+
+Each service points at its own AppConfig application (e.g. `alterx-engine`
+for model-gateway, `alterx-tool-gateway` for tool-gateway) in `ALTER_REGION`.
+Under `appconfig`, the service also resolves its real secrets from AWS
+Secrets Manager and its real SSM parameters, so the corresponding real
+resources must exist. `ALTER_ENV=local` keeps the local secret namespace.
+
+**Deployed environments** set `ALTER_CONFIG_SOURCE=appconfig` everywhere. In
+that world the two scoped overrides (`AUDIT_CONFIG_SOURCE`,
+`PLATFORM_API_CONFIG_SOURCE`) are redundant — they exist only to let a local
+file override the shared value — and can be dropped. That cleanup is noted
+here rather than done now, because the committed local default stays mock.
+
 ## Start dependency stack
 
 ```bash
