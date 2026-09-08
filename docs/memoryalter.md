@@ -439,6 +439,29 @@ Every entry: **What / Why / How / When / Where.**
 - **Why the measurement was not forced through anyway.** Generating passwords and substituting them by hand would have produced a golden-set number from an environment nobody could reproduce — which is what task 1.4 spent itself establishing is worthless. The finding is the deliverable; the number waits.
 - **When.** 2026-09-09, attempting task 1.5's live run.
 
+### LocalStack environment variables defeating the real-AWS path — second instance
+
+- **What.** C21's bootstrap fills `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` from the example's LocalStack placeholders. Environment variables beat the `~/.aws` profile, so **sourcing the generated `.env.local` breaks real AWS entirely**: `An error occurred (InvalidClientTokenId) ... The security token included in the request is invalid`, while the real credentials are fine. Unset those two and `sts get-caller-identity` succeeds immediately.
+- **Why it is a pattern rather than a bug.** `AWS_ENDPOINT_URL` did exactly this in task 1.2 — a LocalStack variable silently defeating the real-AWS path, failing in a way that looks like something else. 1.2 fixed its instance with a service-specific override plus a fatal guard. **This one has no guard at all**, and the failure it produces points at credentials that are not the problem.
+- **Where it bites.** Any task needing real AWS from a bootstrapped environment. Worked around during the 1.5 run attempt with a named one-line deviation — a copy of `.env.local` minus those two lines — which is a workaround, not the fix.
+- **When.** 2026-09-09.
+
+### Fourteen hardcoded ports, and three tasks that paid for them
+
+- **What.** `docker-compose.yml` hardcodes every host port — 5432, 5433, 5434, 5435, 6379, 4566, 7233, 8233, 3200, 4317, 4318, 3300, 5001, 5002 — with no parameterisation. So two checkouts of this project cannot run on one machine.
+- **Not hypothetical.** Three stacks are live here: `alter-x-4--` up two weeks holding six of those ports, `alter-engine-` up seven days on 5440/6390/7240, and presidio on 5001/5002. `alterengine-6`'s stack dies on `Bind for 127.0.0.1:6379 failed: port is already allocated`.
+- **What it has cost.** Task 1.3 ran on ports 3133–3138 to dodge it, which made task 1.0's health check inapplicable and left six services verified by hand. The 1.5 live measurement then could not start at all. Three tasks, one unparameterised list.
+- **Why stopping the sibling stack is the wrong fix.** It swaps the collision rather than solving it — afterwards the sibling is the one that cannot start. Folded into C16, because ports living in two places is also why the health check cannot be trusted.
+- **When.** 2026-09-09.
+
+### A recommendation given without attacking it first
+
+- **What.** Presented three options for the port collision with a recommendation to stop the `alter-x-4-` stack, and ran no attack on it. Havish asked whether I had.
+- **What the attack would have caught.** Stopping the sibling swaps the collision instead of solving it. Recommending offset ports would have repeated the exact mistake recorded two tasks earlier, when 1.3's non-standard ports made the health check inapplicable. And the real defect — fourteen hardcoded ports — was neither option.
+- **And it was against the grain.** *"Leave Alter alone, lets proceed"* and *"do not post anything on alter-x-4-"* are a consistent line: do not disturb the frozen thing, work around it. Attacking the draft would have surfaced that; instead Havish had to.
+- **The rule is [[feedback_self_attack_before_recommending]] and it was skipped**, three days after being written down. Worth recording that having the rule is not the same as running it.
+- **When.** 2026-09-09.
+
 ### PR #89 — a red PR holding a correct diagnosis
 
 - **What.** Opened 29 August with correct diagnoses of seven defects. It went red on CI,
