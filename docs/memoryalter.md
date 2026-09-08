@@ -335,6 +335,24 @@ Every entry: **What / Why / How / When / Where.**
 - **Why it matters.** #124 was the fix for exactly this and it merged. The assertions were never re-budgeted, so the fix holds only on hardware fast enough to finish ten calls in five seconds. **A check whose passing depends on machine speed is not a check.** It also means a regression script that includes LocalStack has a permanently-failing member on slower hosts, and a check people learn to ignore is worse than none.
 - **When.** 2026-09-08, task 1.0.
 
+### A permission bit silently disabled a LocalStack init script
+
+- **What.** `infrastructure/local/localstack-init/40-service-startup-resources.sh` was committed at mode **100644** while all three of its siblings were **100755**. LocalStack's init hook skipped it without complaint, so the secrets and SSM parameters it creates — `COST_DATABASE_SECRET_REF`, `AUDIT_ARCHIVE_BUCKET_PARAM` and others — never existed. Services depending on them were broken from committed configuration.
+- **Why it matters.** No content change would have revealed this. A file mode is invisible in every diff view and every code review, the script is present and correct, and the failure surfaces as unrelated services missing configuration. `docs/local-dev.md` even documents a manual workaround for the resulting gap, which becomes unnecessary once the bit is restored — the workaround was treating the symptom.
+- **How found.** Task 1.0, by running the stack. Verified against HEAD: `git ls-tree` showed 100644 where its three siblings showed 100755.
+- **When.** 2026-09-08. Fixed the same day.
+- **Where.** `infrastructure/local/localstack-init/`.
+
+### The deferred Cache/Reuse plane is already built, running, and about to change behaviour
+
+- **What.** `model-gateway.service.ts` consults a **semantic cache before calling any model provider**, on both the invoke and stream paths, unconditionally. Default similarity threshold **0.95** (`packages/shared-clients/src/mocks/cache-provider.ts:19`). Under `ALTER_CONFIG_SOURCE=mock` it is an in-memory per-process `Map`; otherwise Redis.
+- **Why it matters, and this is the part nobody has flagged.** Under mock embeddings every pair of texts clusters around 0.85–0.87, comfortably below 0.95, so the cache only ever hits on **byte-identical** text. It behaves as an exact-match cache. **Real embeddings change that.** Genuinely near-identical prompts will exceed 0.95, and the cache becomes semantic in earnest — returning one prompt's answer for a different prompt. **Task 1.2 will cause that change as a side effect, and nobody decided it.**
+- **Against the design log.** §12 defers the Cache/Reuse plane past v1 — *"nothing to reuse on day one"* — while reasoning that a cached answer is the verified answer because it passed the same verification pipeline. That reasoning holds only if the cache never returns a result for genuinely different work. The plane is built and live regardless of the deferral.
+- **Second consequence: eval scores.** The harness runs a 30-case golden set. If cases repeat text across runs, cache hits return prior answers and the scores measure the cache, not the model. Relevant to task 1.5's re-run.
+- **How found.** Task 1.0's builder traced it to explain an unexplained 80x speedup (0.19s against a documented 15.85s), correctly retracting their first explanation. The trace was evidenced: no process restart between dispatches, zero semantic-cache keys in Redis, byte-identical prompts, similarity 1.0 against a 0.95 threshold.
+- **When.** 2026-09-08.
+- **Where.** `apps/model-gateway/src/gateway/model-gateway.service.ts:188,265,294`.
+
 ### PR #89 — a red PR holding a correct diagnosis
 
 - **What.** Opened 29 August with correct diagnoses of seven defects. It went red on CI,

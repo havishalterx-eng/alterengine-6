@@ -202,6 +202,24 @@ The first honest number will look like a regression, and someone reading
 later will treat it as one unless it is on the record that the old numbers
 never meant anything.
 
+A SIDE EFFECT THIS TASK CAUSES — REPORT IT, DO NOT FIX IT
+
+model-gateway consults a SEMANTIC CACHE before calling any model provider,
+on both the invoke and stream paths, with a default similarity threshold of
+0.95 (packages/shared-clients/src/mocks/cache-provider.ts:19).
+
+Under the mock embedding, every pair of texts scores around 0.85-0.87 —
+below 0.95 — so the cache only ever hits on byte-identical text. It behaves
+as an exact-match cache.
+
+Real embeddings change that. Near-identical prompts will exceed 0.95, and
+the cache starts returning one prompt's answer for a different prompt.
+Your task causes this. Nobody decided it.
+
+Measure it and report it: after wiring, embed two genuinely similar but
+non-identical prompts and say whether they cross 0.95. Do NOT change the
+threshold or the cache — that is Track C item C17, a design decision.
+
 VERIFICATION — READ docs/verification-standard.md FIRST
 
 That document is binding on every task. Four requirements: the check tests

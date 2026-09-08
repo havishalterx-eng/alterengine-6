@@ -69,7 +69,14 @@ issue. No code has changed.
 unproven" purely because the local mock answers everything. It has already produced three
 false readings.
 
-- [~] **1.0 [+] prove the stack runs, and keep it running.** Not in the action plan —
+- [x] **1.0 [+] prove the stack runs, and keep it running.** **CLOSED 2026-09-08.** 47 ports,
+      26 services, all answering; a real two-node workflow dispatched through the real
+      Executor with upstream output reaching the second node; a service stopped on purpose
+      and the failure seen. Produced two findings beyond its brief — a permission bit that
+      silently disabled a LocalStack init script, and the `ALTER_CONFIG_SOURCE` contradiction
+      that stops platform-api starting from committed config. Its regression check is
+      committed but **not yet wired** — see C16.
+- [x] ~~**1.0 (was in progress)**~~ Not in the action plan —
       #122/#123 already fixed the environment and the team had it up on 6 Sep. Added
       because nothing *keeps* it fixed, and the assessment names that exact mechanism as
       what produced the wrong count twice. Half a day, and it protects the phase that
@@ -307,10 +314,22 @@ demo.
       proposed blast radius / fail mode / driver values in `components/` with
       `architecture/component-contracts.md`'s. Its done gates are targets, not gates that
       fail today. Roughly a day; closes design log §29's open item.
-- [ ] **C16 wire `verify-local-stack-health.sh` into CI.** Task 1.0 produced it; nothing
-      runs it. An unwired check is `verifyChain()` again — machinery with no driver, creating
-      false confidence. CI's `gate` job already runs four `scripts/check-*.sh` gates; this
-      joins them, or a named schedule does if CI cannot bring the stack up.
+- [ ] **C16 make `verify-local-stack-health.sh` trustworthy, then wire it into CI.** Task 1.0
+      produced it and it is committed, but it does **not yet meet
+      [`verification-standard.md`](verification-standard.md)** and is deliberately unwired
+      until it does. Two gaps, both acknowledged in the script's own header: **nine of
+      twenty-six checks read Docker's cached `Health.Status`** rather than probing (a
+      container that just died reads healthy for up to one 5s interval — that is process
+      state, not real behaviour); and **some port defaults are sandbox values, not committed
+      ones**, so on a machine using committed ports those checks fail for the wrong reason.
+      Fix both, then join the four `scripts/check-*.sh` gates in CI's `gate` job.
+- [ ] **C17 decide what the semantic cache is for.** `model-gateway` consults a semantic
+      cache before every model call, threshold 0.95, on both invoke and stream paths. Under
+      mock embeddings everything clusters at 0.85–0.87 so it only hits on identical text;
+      **real embeddings will push near-identical prompts past 0.95 and make it genuinely
+      semantic — a behaviour change task 1.2 causes as a side effect that nobody decided.**
+      Design log §12 defers this plane past v1, yet it is built and live. Also decide whether
+      eval golden sets bypass it, or the harness measures the cache rather than the model.
 - [ ] **C15 one variable, one question — `ALTER_CONFIG_SOURCE`.** Engine services ask
       "mock or appconfig?"; platform-api asks "file or appconfig?". Two different questions
       wearing one name, currently resolved by per-service scoped overrides
