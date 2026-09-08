@@ -25,6 +25,7 @@ describe("loadModelGatewayEnvironment", () => {
       serviceName: "model-gateway",
       region: "ap-south-1",
       configSource: "mock",
+      embeddingProvider: "mock",
       httpPort: 3023,
       grpcBindAddress: "0.0.0.0:50051",
       costLedgerGrpcAddress: "localhost:50060",
@@ -112,6 +113,50 @@ describe("loadModelGatewayEnvironment", () => {
     ).toMatchObject({
       bedrockRuntimeEndpoint: "https://bedrock-runtime.ap-south-1.amazonaws.com",
     });
+  });
+
+  it("allows Titan only as an explicit local embedding opt-in", () => {
+    expect(
+      loadModelGatewayEnvironment(
+        environment({
+          MODEL_GATEWAY_EMBEDDING_PROVIDER: "titan",
+          AWS_ENDPOINT_URL: "http://127.0.0.1:4566",
+          AWS_ENDPOINT_URL_BEDROCK_RUNTIME:
+            "https://bedrock-runtime.ap-south-1.amazonaws.com",
+        }),
+      ),
+    ).toMatchObject({
+      configSource: "mock",
+      embeddingProvider: "titan",
+      bedrockRuntimeEndpoint: "https://bedrock-runtime.ap-south-1.amazonaws.com",
+    });
+    expect(() =>
+      loadModelGatewayEnvironment(
+        environment({ MODEL_GATEWAY_EMBEDDING_PROVIDER: "other" }),
+      ),
+    ).toThrow(/MODEL_GATEWAY_EMBEDDING_PROVIDER/);
+  });
+
+  it("ignores the local embedding-provider flag in AppConfig mode", () => {
+    const appConfig = loadModelGatewayEnvironment(
+      environment({
+        ALTER_ENV: "dev",
+        ALTER_CONFIG_SOURCE: "appconfig",
+        MODEL_GATEWAY_EMBEDDING_PROVIDER: "mock",
+        APPCONFIG_APPLICATION_ID: "app-1",
+        APPCONFIG_ENVIRONMENT_ID: "env-1",
+        APPCONFIG_CONFIGURATION_PROFILE_ID: "profile-1",
+        ANTHROPIC_API_KEY_SECRET_REF: "secret",
+        OPENAI_API_KEY_SECRET_REF: "secret",
+        PLATFORM_ADMIN_SERVICE_TOKEN_SECRET_REF: "secret",
+        PRESIDIO_ANALYZER_URL: "http://presidio-analyzer.local:5001",
+        PRESIDIO_ANONYMIZER_URL: "http://presidio-anonymizer.local:5002",
+        CACHE_REDIS_HOST: "cache.model-gateway.local",
+        CACHE_REDIS_PORT: "6379",
+      }),
+    );
+    expect(appConfig).toMatchObject({ configSource: "appconfig" });
+    expect(appConfig).not.toHaveProperty("embeddingProvider");
   });
 
   it("rejects the mock config source when NODE_ENV is production, even if ALTER_ENV is local", () => {

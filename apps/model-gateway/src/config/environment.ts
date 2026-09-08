@@ -32,6 +32,8 @@ export interface ModelGatewayAppConfigEnvironment
 export interface ModelGatewayMockEnvironment
   extends ModelGatewayEnvironmentBase {
   readonly configSource: "mock";
+  readonly embeddingProvider: "mock" | "titan";
+  readonly bedrockRuntimeEndpoint?: string;
 }
 
 export type ModelGatewayEnvironment =
@@ -117,6 +119,39 @@ export function loadModelGatewayEnvironment(
     );
   }
 
+  const configuredEmbeddingProvider =
+    environment.MODEL_GATEWAY_EMBEDDING_PROVIDER?.trim() || "mock";
+  if (
+    configSource === "mock" &&
+    configuredEmbeddingProvider !== "mock" &&
+    configuredEmbeddingProvider !== "titan"
+  ) {
+    throw new ModelGatewayConfigurationError(
+      "MODEL_GATEWAY_EMBEDDING_PROVIDER",
+      "must be one of mock, titan",
+    );
+  }
+  const embeddingProvider: "mock" | "titan" =
+    configuredEmbeddingProvider === "titan" ? "titan" : "mock";
+  const usesTitan = configSource === "appconfig" || embeddingProvider === "titan";
+  const bedrockRuntimeEndpoint = environment.AWS_ENDPOINT_URL_BEDROCK_RUNTIME?.trim();
+  if (usesTitan && environment.AWS_ENDPOINT_URL?.trim() && !bedrockRuntimeEndpoint) {
+    throw new ModelGatewayConfigurationError(
+      "AWS_ENDPOINT_URL_BEDROCK_RUNTIME",
+      "is required when AWS_ENDPOINT_URL is set so Bedrock does not use that endpoint",
+    );
+  }
+  if (bedrockRuntimeEndpoint) {
+    try {
+      new URL(bedrockRuntimeEndpoint);
+    } catch {
+      throw new ModelGatewayConfigurationError(
+        "AWS_ENDPOINT_URL_BEDROCK_RUNTIME",
+        "must be an absolute URL",
+      );
+    }
+  }
+
   const baseEnvironment: ModelGatewayEnvironmentBase = {
     alterEnvironment:
       alterEnvironment as ModelGatewayEnvironment["alterEnvironment"],
@@ -140,25 +175,14 @@ export function loadModelGatewayEnvironment(
   };
 
   if (configSource === "mock") {
-    return { ...baseEnvironment, configSource: "mock" };
-  }
-
-  const bedrockRuntimeEndpoint = environment.AWS_ENDPOINT_URL_BEDROCK_RUNTIME?.trim();
-  if (environment.AWS_ENDPOINT_URL?.trim() && !bedrockRuntimeEndpoint) {
-    throw new ModelGatewayConfigurationError(
-      "AWS_ENDPOINT_URL_BEDROCK_RUNTIME",
-      "is required when AWS_ENDPOINT_URL is set so Bedrock does not use that endpoint",
-    );
-  }
-  if (bedrockRuntimeEndpoint) {
-    try {
-      new URL(bedrockRuntimeEndpoint);
-    } catch {
-      throw new ModelGatewayConfigurationError(
-        "AWS_ENDPOINT_URL_BEDROCK_RUNTIME",
-        "must be an absolute URL",
-      );
-    }
+    return {
+      ...baseEnvironment,
+      configSource: "mock",
+      embeddingProvider,
+      ...(bedrockRuntimeEndpoint === undefined
+        ? {}
+        : { bedrockRuntimeEndpoint }),
+    };
   }
 
   return {
