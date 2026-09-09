@@ -60,6 +60,10 @@ if ! aws --region "${ALTER_REGION:-ap-south-1}" sts get-caller-identity >/dev/nu
   echo "run-intent-golden-set: AWS credentials not usable in ${ALTER_REGION:-ap-south-1}" >&2
   exit 2
 fi
+if ! command -v pnpm >/dev/null 2>&1 || ! node --version | grep -q '^v22\.'; then
+  echo "run-intent-golden-set: pnpm and Node 22 are required (see .nvmrc)" >&2
+  exit 2
+fi
 
 # --- dependency stack: engine-db (eval_db) + redis (cache) -------------------
 docker compose --env-file "$ENV_FILE" up -d --build --wait \
