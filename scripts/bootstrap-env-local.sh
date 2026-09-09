@@ -82,7 +82,7 @@ detect_stale_volumes() {
     echo "  (docker daemon unreachable; cannot check stale volumes)" >&2; return 0
   fi
   local project vol
-  project="$(basename "$(pwd)")"
+  project="${COMPOSE_PROJECT_NAME:-$(basename "$(pwd)")}"
   vol="${project}_engine_db_data"
   if docker volume ls -q --filter "name=^${vol}\$" | grep -q .; then
     cat >&2 <<EOF
