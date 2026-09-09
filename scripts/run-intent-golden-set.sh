@@ -42,6 +42,15 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 set -a; . "$ENV_FILE"; set +a
 
+# This runner calls real Bedrock. LocalStack credentials from .env.local would
+# override the operator's normal AWS credential chain and make that fail.
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+# Migrations and report must read same database. .env.local derives this URL
+# from ENGINE_DB_PORT, so exported port overrides flow through both paths.
+: "${EVAL_DB_URL_SYNC:?run-intent-golden-set: EVAL_DB_URL_SYNC is required}"
+export EVAL_DB_URL_SYNC
+
 # --- prerequisites -----------------------------------------------------------
 if ! docker info >/dev/null 2>&1; then
   echo "run-intent-golden-set: docker is not reachable (socket denied / daemon down)" >&2
@@ -52,18 +61,18 @@ if ! aws --region "${ALTER_REGION:-ap-south-1}" sts get-caller-identity >/dev/nu
   exit 2
 fi
 
-PY="${PYTHON:-python3}"
-if ! command -v "$PY" >/dev/null 2>&1; then
-  echo "run-intent-golden-set: python3 not found on PATH" >&2
-  exit 2
-fi
-
 # --- dependency stack: engine-db (eval_db) + redis (cache) -------------------
 docker compose --env-file "$ENV_FILE" up -d --build --wait \
   engine-db redis >/dev/null
 
 # --- eval_db migrations + golden-set seed ------------------------------------
 # alembic 0002_seed_launch_golden_sets seeds the 30-case intent golden set.
+pnpm exec nx run eval-service:build >/dev/null
+PY="$REPO_ROOT/apps/eval-service/.venv/bin/python"
+if [ ! -x "$PY" ]; then
+  echo "run-intent-golden-set: eval-service virtualenv missing after build" >&2
+  exit 2
+fi
 pnpm exec nx run eval-service:migrate >/dev/null
 
 # --- build the two eval processes ------------------------------------------
@@ -89,7 +98,7 @@ export AUTH0_M2M_CLIENT_ID=local-dev-client
 export AUTH0_M2M_CLIENT_SECRET=local-dev-secret
 trap 'kill $M2M_PID 2>/dev/null || true' EXIT
 
-free_port() { python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',0)); print(s.getsockname()[1]); s.close()"; }
+free_port() { "$PY" -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',0)); print(s.getsockname()[1]); s.close()"; }
 MG_PORT=$(free_port); MG_HTTP=$(free_port); INTENT_PORT=$(free_port)
 
 # --- model-gateway (Bedrock primary, qwen alias policy seeded in-process) ----
@@ -98,7 +107,7 @@ MG_PORT=$(free_port); MG_HTTP=$(free_port); INTENT_PORT=$(free_port)
 # SSM override (MODEL_POLICY_OVERRIDE_PARAMETER_NAME) uses. To bind the
 # aliases on the PRODUCTION path too, run scripts/apply-model-alias-policy.sh.
 ALTER_ENV=local ALTER_SERVICE_NAME=model-gateway ALTER_REGION="${ALTER_REGION:-ap-south-1}" \
-ALTER_CONFIG_SOURCE=mock PORT="$MG_HTTP" GRPC_BIND_ADDRESS="127.0.0.1:$MG_PORT" \
+ALTER_CONFIG_SOURCE=mock MODEL_GATEWAY_PORT="$MG_HTTP" MODEL_GATEWAY_GRPC_BIND_ADDRESS="127.0.0.1:$MG_PORT" \
   NODE_PATH="$REPO_ROOT/apps/model-gateway/node_modules:$REPO_ROOT/node_modules" \
   PATH="$PATH" \
   node "$MODEL_GW_DIST" >/tmp/alter-modelgw.log 2>&1 &
@@ -127,8 +136,6 @@ wait_port "$MG_PORT" "model-gateway"
 wait_port "$INTENT_PORT" "eval_intent_grpc_server"
 
 export INTENT_GRPC_TARGET="127.0.0.1:$INTENT_PORT"
-export EVAL_DB_URL_SYNC="${EVAL_DB_URL_SYNC:-postgresql+psycopg2://eval_service:eval_local@localhost:5433/eval_db}"
-
 echo "=== Run 1 (cold cache) ==="
 T0=$(date +%s.%N)
 "$PY" "$REPO_ROOT/apps/eval-service/scripts/run_intent_golden_set.py" | tee /tmp/alter-golden-run1.txt
@@ -139,7 +146,7 @@ T2=$(date +%s.%N)
 "$PY" "$REPO_ROOT/apps/eval-service/scripts/run_intent_golden_set.py" | tee /tmp/alter-golden-run2.txt
 T3=$(date +%s.%N)
 
-python3 - "$T0" "$T1" "$T2" "$T3" <<'PYEOF'
+"$PY" - "$T0" "$T1" "$T2" "$T3" <<'PYEOF'
 import sys
 cold = float(sys.argv[2]) - float(sys.argv[1])
 warm = float(sys.argv[4]) - float(sys.argv[3])

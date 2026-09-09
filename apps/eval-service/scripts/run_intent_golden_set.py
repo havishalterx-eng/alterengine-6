@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """Phase 1 (task 1.5) -- run the 30-case intent golden set against a real
 Bedrock-backed Conversation Manager and print per-case reasons grouped.
 
@@ -50,10 +51,9 @@ from uuid import UUID
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT / "apps" / "eval-service"))
 
-from sqlalchemy import create_engine, event, select, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from src.db.models import EvalCase, EvalResult, EvalRun, GoldenSet
 from src.execution.agent_binding_client import AgentBindingEvalClient
 from src.execution.audit_client import AuditEvalClient
 from src.execution.credential_client import CredentialEvalClient
@@ -193,7 +193,7 @@ def _report(sessions, eval_run_id: UUID) -> list[CaseReport]:
     rows = sessions().execute(
         text(
             """
-            SELECT ec.id, er.verdict, er.details, ec.input_json, ec.expected_json
+            SELECT ec.id, er.verdict, er.details, ec.input, ec.expected
             FROM eval_results er
             JOIN eval_cases ec ON ec.id = er.eval_case_id
             WHERE er.eval_run_id = :rid
@@ -206,8 +206,8 @@ def _report(sessions, eval_run_id: UUID) -> list[CaseReport]:
     for position, row in enumerate(rows, start=1):
         details = row.details if isinstance(row.details, dict) else json.loads(row.details)
         observed_intent, reason = _case_reason(details)
-        expected_intent = row.expected_json.get("intent") if isinstance(row.expected_json, dict) else None
-        utterance = row.input_json.get("utterance") if isinstance(row.input_json, dict) else None
+        expected_intent = row.expected.get("intent") if isinstance(row.expected, dict) else None
+        utterance = row.input.get("utterance") if isinstance(row.input, dict) else None
         reports.append(
             CaseReport(
                 position=position,
@@ -221,6 +221,22 @@ def _report(sessions, eval_run_id: UUID) -> list[CaseReport]:
     return reports
 
 
+def _case_count(sessions) -> int:
+    return int(
+        sessions().execute(
+            text(
+                """
+                SELECT count(*)
+                FROM golden_sets AS gs
+                JOIN eval_cases AS ec ON ec.golden_set_id = gs.id
+                WHERE gs.name = :name
+                """
+            ),
+            {"name": GOLDEN_SET_NAME},
+        ).scalar_one()
+    )
+
+
 def main() -> int:
     db_url = os.environ.get("EVAL_DB_URL_SYNC")
     if not db_url:
@@ -229,13 +245,21 @@ def main() -> int:
         from src.config import DEFAULT_EVAL_DB_URL_SYNC
 
         db_url = os.environ.get("EVAL_DB_URL_SYNC", DEFAULT_EVAL_DB_URL_SYNC)
+    engine = _build_engine(db_url)
+    sessions = sessionmaker(bind=engine, expire_on_commit=False, class_=Session)
+    case_count = _case_count(sessions)
+    if case_count == 0:
+        print(
+            f"NO CASES: golden set {GOLDEN_SET_NAME!r} is empty in "
+            "EVAL_DB_URL_SYNC; refusing to report a score.",
+            file=sys.stderr,
+        )
+        return 3
+
     intent_target = os.environ.get("INTENT_GRPC_TARGET")
     if not intent_target:
         print("run_intent_golden_set: INTENT_GRPC_TARGET is required", file=sys.stderr)
         return 2
-
-    engine = _build_engine(db_url)
-    sessions = sessionmaker(bind=engine, expire_on_commit=False, class_=Session)
 
     orchestrator = _build_orchestrator(sessions, intent_target)
     print(f"Running golden set {GOLDEN_SET_NAME!r} against {intent_target} ...")
@@ -247,6 +271,12 @@ def main() -> int:
     )
 
     reports = _report(sessions, summary.eval_run_id)
+    if len(reports) != case_count:
+        print(
+            f"run_intent_golden_set: expected {case_count} result rows, got {len(reports)}",
+            file=sys.stderr,
+        )
+        return 3
     print("\nPER-CASE:")
     for case in reports:
         print(
