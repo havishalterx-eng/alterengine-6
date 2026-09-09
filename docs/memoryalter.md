@@ -476,6 +476,28 @@ Every entry: **What / Why / How / When / Where.**
 - **Coexistence proved.** Ten containers on offset ports — 15433, 14566, 16379, 15434, 15435, 13200, 13300, 17233, 15001, 15002 — alongside two sibling stacks left untouched and still running. A row written to this stack's engine-db on 15433 read back from 15433 only. The collision is solved rather than swapped, which was the flaw in the alternative of stopping the sibling.
 - **When.** 2026-09-09.
 
+### The golden-set runner has never run, and hides seven defects
+
+- **What.** One attempt to execute `scripts/run-intent-golden-set.sh` on a machine with Docker surfaced seven distinct defects, each hidden behind the previous:
+  1. Port overrides not plumbed through, so on a machine with a sibling checkout the runner uses defaults that belong to someone else.
+  2. `bootstrap-env-local.sh --merge` flattens C16's parameterisation — a file generated before C16 keeps literal ports, and merge preserves rather than re-parameterises them, so overrides silently do nothing.
+  3. **C21's existing-volume guard does not fire.** Regenerated passwords against volumes whose roles carry the old ones produce `FATAL: password authentication failed` buried in an alembic traceback — the exact failure C21's prompt said must be named.
+  4. No `PYTHONPATH`: `ModuleNotFoundError: No module named 'src'`.
+  5. System python rather than eval-service's venv: `No module named 'psycopg2'`.
+  6. The report query names `ec.input_json`; the column is `input`. So even a successful run cannot report.
+  7. **The golden sets are not in the database the runner reads.** After clean migrations: `eval_runs=0, eval_results=0, eval_cases=0, golden_sets=0`. Seeding and reading point at different databases.
+- **Why all seven survived.** The runner was written in a sandbox with no Docker, so it could never be executed by the session that wrote it. Every defect is of the kind only running finds.
+- **Defect 7 is the dangerous one.** Without it the runner executes an empty set and reports zero — indistinguishable from thirty genuine failures. *A runner that reports 0 of 0 as though it were 0 of 30 is how the last wrong count happened.*
+- **When.** 2026-09-09.
+
+### Pushing through five layers instead of handing back after two
+
+- **What.** The CEO session attempted the live run and worked through port collisions, a flattened parameterisation, mismatched volume passwords, a missing PYTHONPATH, a missing venv, and a wrong column name — before finding the golden sets were absent entirely. Each fix looked like the last one.
+- **Why it was wrong even though the findings were real.** Every fix lived in a shell: exported ports, `PYTHONPATH`, a venv on `PATH`, and eight `ALTER ROLE` statements. None was committed, so none is reproducible — **manufacturing exactly the unreproducible environment tasks 1.4 and C21 existed to eliminate.** It was also builder work being done from the review seat.
+- **The rule that should have fired.** Every master prompt carries "if you find yourself retrying the same thing more than twice, STOP and report." It applies to the CEO session too, and it did not.
+- **What was worth keeping.** The seven defects are now named in 1.5b's prompt, so nobody rediscovers them. That is the salvage, not a justification.
+- **When.** 2026-09-09.
+
 ### PR #89 — a red PR holding a correct diagnosis
 
 - **What.** Opened 29 August with correct diagnoses of seven defects. It went red on CI,

@@ -135,7 +135,10 @@ false readings.
       configuration alone. **Convention for anything new: `/alter/<env>/<service>/<kebab-case>`.**
       *Prompt ready [`prompts/revive-14-secrets-plumbing.md`](prompts/revive-14-secrets-plumbing.md)
       — needs `secretsmanager:CreateSecret` granted first.*
-- [~] **1.5 re-run everything — the point of the phase.** Bedrock is **already** the model
+- [~] **1.5 re-run everything — the point of the phase.** Code and artefacts merged; **the
+      measurement is not done.** The runner has never executed — one live attempt surfaced
+      seven defects, the worst being that the golden sets are absent from the database it
+      reads, so it would report an empty set as a zero. Split out as **1.5b**. Original scope: Bedrock is **already** the model
       provider under appconfig; the work is binding the four aliases (`FAST`, `STANDARD`,
       `ADVANCED`, `CEILING`) to real model ids, all starting on `qwen.qwen3-32b-v1:0` so the
       first numbers measure the engine rather than a tier-mapping guess. *Prompt ready
@@ -412,6 +415,11 @@ demo.
       different from what anyone runs. **This blocks task 1.5's live measurement**, and it is
       the mechanism the assessment blamed for two wrong counts, still present after task 1.0.
       Needs a bootstrap script that generates and propagates the values, committed.
+- [ ] **1.5b [+] make the golden-set runner actually run.** *Prompt ready
+      [`prompts/revive-15b-make-the-runner-run.md`](prompts/revive-15b-make-the-runner-run.md)
+      — **requires Docker**, and the builder must confirm that before accepting.* Seven named
+      defects, all found in one live attempt, none rediscoverable from a sandbox. **Phase 1's
+      last blocker.**
 - [ ] **C23 the health check must verify identity, not just status.** It asserts HTTP 200 and
       never asserts the responder is the service it asked for. Live, that produced three false
       passes against a sibling stack's processes — and probing **eval-service**'s port returned
