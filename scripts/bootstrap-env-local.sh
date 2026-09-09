@@ -142,6 +142,22 @@ load_real_existing() {
   done < "$1"
 }
 
+needs_generated_engine_password() {
+  local key value
+  for key in ENGINE_DB_ADMIN_PASSWORD AUDIT_DB_PASSWORD INTELLIGENCE_DB_PASSWORD COST_DB_PASSWORD ORCHESTRATION_DB_PASSWORD; do
+    value="$(awk -F= -v k="$key" '$1==k{print $2; exit}' "$1")"
+    if is_placeholder "$value"; then return 0; fi
+  done
+  return 1
+}
+
+is_derived_value() {
+  case "$1" in
+    *'<'*|*replace-me-with-a-random-value*|*'${'*) return 0;;
+    *) return 1;;
+  esac
+}
+
 # render: substitute every known placeholder token in the example, writing OUT.
 # $1 = values file (KEY=VAL, sourceable), $2 = output path
 render() {
@@ -274,6 +290,7 @@ EOF
 
   merge)
     [ -f "$OUT" ] || { echo "bootstrap-env-local: $OUT does not exist; nothing to merge into. Run without --merge to create it." >&2; exit 1; }
+    if needs_generated_engine_password "$OUT"; then detect_stale_volumes || exit 1; fi
     gen="$(mktemp)"; existing="$(mktemp)"; merged="$(mktemp)"; rendered="$(mktemp)"
     trap 'rm -f "$gen" "$existing" "$merged" "$rendered"' EXIT
     generate_values > "$gen"
@@ -297,6 +314,8 @@ EOF
       esac
       rk="${rline%%=*}"; rv="${rline#*=}"
       existing_val="$(awk -F= -v k="$rk" '$1==k{print $2; exit}' "$existing")"
+      template_val="$(awk -F= -v k="$rk" '$1==k{print substr($0, index($0, "=")+1); exit}' "$EXAMPLE")"
+      if is_derived_value "$template_val"; then existing_val=""; fi
       if [ -n "$existing_val" ]; then
         printf '%s=%s\n' "$rk" "$existing_val" >> "$OUT.tmp.$$"
       else
@@ -312,4 +331,3 @@ EOF
     fi
     ;;
 esac
-
