@@ -48,7 +48,7 @@ from pathlib import Path
 from uuid import UUID
 
 # Make `src.*` importable when run as a script from the repo root.
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO_ROOT / "apps" / "eval-service"))
 
 from sqlalchemy import create_engine, event, text
