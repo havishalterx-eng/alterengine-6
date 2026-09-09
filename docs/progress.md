@@ -32,6 +32,8 @@ Format: `YYYY-MM-DD · task · what was demonstrated · who verified`
 - `2026-09-08 · 1.1 · real embeddings discriminate: relevant 0.8600 vs nonsense 0.1214/0.0757 against threshold 0.6; no re-tuning needed · verified live, four real calls`
 - `2026-09-08 · 3.0 · auto-creation idempotent per tenant+workspace+capability set: three identical requests now mint one agent (was three, #125); two genuinely concurrent requests produce one usable binding; reordered capabilities hit the same key; a different capability set still creates its own agent · verified against real Postgres, proven to fail first`
 - `2026-09-09 · 1.5b · seven named defects addressed per commit history; empty-golden-set guard spot-checked directly against source, exits 3 with exact message; PR #7 pushed and watched to completion · CI red on eval-service:typecheck (6 real mypy errors), not the hang the builder report named as blocking — NOT merged, NOT closing 1.5b`
+- `2026-09-09 · 1.5b · six mypy type annotations fixed (f4bc44c), full-file mypy and ruff independently rerun clean, PR #7 pushed and watched to completion · CI green confirmed directly against the API, PR #7 squash-merged, branch kept`
+- `2026-09-09 · 1.5b/1.5 · attempted the actual done gate (real number from a clean checkout) for the first time ever, by anyone · found a genuine clean clone has no node_modules and nothing says to run pnpm install; after installing, pnpm exec nx run eval-service:build ran 14+ minutes at 95-99% CPU and was killed, never returning, while the same target's real work (uv sync --frozen) took 0.283s run directly · NOT closing 1.5 or 1.5b — new blocker C26 opened`
 
 ---
 

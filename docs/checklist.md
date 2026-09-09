@@ -135,10 +135,13 @@ false readings.
       configuration alone. **Convention for anything new: `/alter/<env>/<service>/<kebab-case>`.**
       *Prompt ready [`prompts/revive-14-secrets-plumbing.md`](prompts/revive-14-secrets-plumbing.md)
       — needs `secretsmanager:CreateSecret` granted first.*
-- [~] **1.5 re-run everything — the point of the phase.** Code and artefacts merged; **the
+- [!] **1.5 re-run everything — the point of the phase.** Code and artefacts merged; **the
       measurement is not done.** The runner has never executed — one live attempt surfaced
       seven defects, the worst being that the golden sets are absent from the database it
-      reads, so it would report an empty set as a zero. Split out as **1.5b**. Original scope: Bedrock is **already** the model
+      reads, so it would report an empty set as a zero. Split out as **1.5b**, which merged
+      its seven fixes (PR #7, 2026-09-09) but still has not produced a real number — now
+      blocked on **C26** (Nx cold-graph computation on a clean checkout). 1.5 and 1.5b share
+      one remaining deliverable: the live number. Original scope: Bedrock is **already** the model
       provider under appconfig; the work is binding the four aliases (`FAST`, `STANDARD`,
       `ADVANCED`, `CEILING`) to real model ids, all starting on `qwen.qwen3-32b-v1:0` so the
       first numbers measure the engine rather than a tier-mapping guess. *Prompt ready
@@ -415,24 +418,16 @@ demo.
       different from what anyone runs. **This blocks task 1.5's live measurement**, and it is
       the mechanism the assessment blamed for two wrong counts, still present after task 1.0.
       Needs a bootstrap script that generates and propagates the values, committed.
-- [~] **1.5b [+] make the golden-set runner actually run.** *Prompt ready
-      [`prompts/revive-15b-make-the-runner-run.md`](prompts/revive-15b-make-the-runner-run.md)
-      — **requires Docker**, and the builder must confirm that before accepting.* Seven named
-      defects, all found in one live attempt, none rediscoverable from a sandbox. **PR #7
-      open, CI red — not merged.** All seven fixed and independently verified (empty-set
-      guard reads real source, exits 3, exact message confirmed). **CI's actual failure is
-      not what the builder's report named as the blocker**: `eval-service:typecheck` fails
-      on 6 real mypy errors (untyped defs) in the new `run_intent_golden_set.py` — a
-      trivial fix, confirmed on the real CI runner in ~20s. The builder reported the
-      blocker as `pnpm exec nx run eval-service:build` hanging indefinitely under both
-      Node 20 and Node 22 in a fresh clone — independently reproduced by the CEO session,
-      genuinely hung past 4 minutes with zero output, while the underlying `uv sync
-      --frozen` run directly completes in 13ms. Working theory, not confirmed: cold Nx
-      project-graph computation on a fresh clone with no persisted cache, which CI avoids
-      via its `actions/cache@v4`-restored Nx computation cache (see `CLAUDE.md`) — not a
-      defect in the target itself, since the same target ran in 0.48ms on real CI once the
-      graph was warm. **Not phase-closing.** Next: fix the 6 type annotations, re-push,
-      re-verify CI green before merge.
+- [!] **1.5b [+] make the golden-set runner actually run.** **PR #7 merged 2026-09-09**
+      (`2e2c498`) after real CI green, confirmed on the API. The seven originally-named
+      defects are fixed and merged. **But 1.5b's own done gate — a real number from a clean
+      checkout — has never been reached, by anyone, twice now.** First clean-checkout
+      attempt found an eighth, separate gap: nobody runs `pnpm install`, and nothing tells
+      you to (fresh clone has no `node_modules`; the outer `2>&1 | tee` wrapper silently
+      swallowed the resulting failure and reported a false success). Fixed by hand for this
+      attempt only, not committed anywhere yet. Second attempt, with dependencies installed,
+      hit **C26** below: `pnpm exec nx run eval-service:build` genuinely never returns in
+      reasonable time. **Blocked on C26.** Not phase-closing.
 - [ ] **C23 the health check must verify identity, not just status.** It asserts HTTP 200 and
       never asserts the responder is the service it asked for. Live, that produced three false
       passes against a sibling stack's processes — and probing **eval-service**'s port returned
@@ -446,6 +441,23 @@ demo.
 - [ ] **C25 no root `eslint.config` file exists anywhere in the repo**, despite `lint` being a
       real, invoked target. Found while tracing a dependency-scan advisory to `@nx/eslint`; not
       investigated further — surfaced for someone to look at.
+- [ ] **C26 Nx graph computation on a cold, fresh clone is unusably slow, blocking 1.5/1.5b.**
+      `pnpm exec nx run eval-service:build` — a target whose actual work (`uv sync --frozen`)
+      takes 0.283s run directly — ran at 95–99% CPU continuously for 14+ minutes on a genuine
+      fresh clone and was killed, never having returned. CI never sees this: `CLAUDE.md`
+      confirms the `gate` job restores Nx's computation cache via `actions/cache@v4` before
+      running anything, so CI is never actually cold. **Blocks any real clean-checkout
+      verification**, not just this one target — every builder clones fresh per standing
+      rule 7, so every builder's first Nx invocation of anything pays this same unmeasured
+      cost. Two independent people (the original builder, then the CEO session) both hit
+      this and both read it as a hang rather than a defect, because nothing prints while Nx
+      computes the graph. Root cause not diagnosed — could be graph size, a misconfigured
+      plugin, or network calls during graph construction. Needs a builder to actually
+      profile it (`NX_VERBOSE_LOGGING=true`, or `nx graph` timed on its own) rather than
+      another blind retry. **A companion gap surfaced getting here, already worked around by
+      hand but not fixed:** a genuinely fresh clone has no `node_modules`, and neither the
+      runner script nor `docs/local-dev.md`'s Prerequisites section says to run
+      `pnpm install` — fold that into this same task's fix.
 - [ ] **C22 the bootstrap breaks real AWS.** C21 fills `AWS_ACCESS_KEY_ID` and
       `AWS_SECRET_ACCESS_KEY` from LocalStack placeholders, and environment variables beat the
       `~/.aws` profile — so sourcing the generated file returns `InvalidClientTokenId` while

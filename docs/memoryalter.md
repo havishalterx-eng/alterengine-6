@@ -623,6 +623,61 @@ Every entry: **What / Why / How / When / Where.**
 - **Where.** `apps/eval-service/scripts/run_intent_golden_set.py`,
   `havishalterx-eng/alterengine-6#7`.
 
+### PR #7 merged, then a clean-checkout attempt found the real blocker — Nx itself, confirmed severe
+
+- **What.** After the type fix above, CI went green (`gh run view --json conclusion` returned
+  `"success"` directly against the API) and PR #7 was squash-merged. But merging only proves
+  lint/typecheck/build pass — it does not meet 1.5b's actual done gate, which
+  `docs/prompts/revive-15b-make-the-runner-run.md` states explicitly: *"someone else can get
+  the same number... from a CLEAN CHECKOUT... run the golden set to a reported result... with
+  NO hand-editing and NO shell-only fixes. Paste it."* Nobody had ever done that. So the CEO
+  session did it directly, as verification rather than as building: fresh `git clone` outside
+  the cloud-synced tree (`CLAUDE.md`'s own rule), offset ports so it coexists with every
+  sibling stack, real AWS credentials, `scripts/run-intent-golden-set.sh` run unmodified.
+- **First attempt found a second, separate, real gap: nobody runs `pnpm install`.** A truly
+  fresh clone has no `node_modules`. Neither the runner script nor `docs/local-dev.md`'s
+  Prerequisites section (`Docker Desktop`, `Node.js and pnpm versions declared by repository`
+  — no install step) says to run it. The first live attempt exited with status 0 and did
+  nothing at all: `pnpm exec nx run eval-service:build` failed instantly with
+  `ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL Command "nx" not found`, but the outer
+  `./script 2>&1 | tee log` wrapper reports the exit code of `tee`, not the script, so the
+  real failure was silently swallowed and looked like clean success. **Every prior person who
+  read this as "the runner works, just untested live" was one `pnpm install` away from the
+  real number** — this had never been run to completion by anyone.
+- **After `pnpm install`, the real blocker confirmed, not just theorized.** Re-ran the
+  runner. It reached `pnpm exec nx run eval-service:build` and sat there. Checked the actual
+  process rather than assuming: `ps aux` showed `node .../nx.js run eval-service:build` at
+  **95–99% CPU continuously** for the entire wait — genuinely computing, not deadlocked or
+  I/O-blocked. Killed it after **14 minutes 7 seconds**, still at 99.5% CPU, zero output.
+  Immediately ran the actual underlying command directly, bypassing Nx entirely: `uv sync
+  --frozen` in `apps/eval-service` — **0.283 seconds real time**, full venv creation plus 48
+  packages installed from nothing. The earlier session's "cold Nx graph computation" theory
+  (recorded above, flagged then as unconfirmed) is now confirmed as a real, severe defect:
+  whatever Nx computes before running this target costs at minimum multiple thousands of
+  times the underlying work, and 14+ minutes was not enough to see it finish. **Not proven
+  unbounded — proven far past any reasonable session length**, which is the practical
+  equivalent for anyone trying to use this runner.
+- **Why CI never shows this.** `CLAUDE.md`: CI's `gate` job persists the Nx computation cache
+  via `actions/cache@v4` and restores it before running anything. A fresh clone has no such
+  cache and pays a cost CI has never once measured, because CI is never actually cold.
+- **Why it matters beyond this one script.** Every builder works from a fresh clone by
+  standing rule 7. Every one of them will hit this exact wall on their first Nx invocation of
+  *any* target, not just this one, and — per the original builder's own report — two
+  independent attempts under two different Node versions both looked like a hang and both
+  were abandoned per the two-retry rule. That was the correct call each time; the tool itself
+  is the problem, not the caller.
+- **What was not done.** No fix attempted. Diagnosing or fixing Nx's graph computation is
+  build work, not CEO work, and the cause (dependency graph size, a misconfigured plugin,
+  network calls during graph construction, something else) is not yet known — only that the
+  underlying command is fast and the wrapper is not.
+- **Status.** 1.5b does not close. Its own done gate — a real number from a clean checkout —
+  has now been attempted twice for real, by two different people, and has never once been
+  reached. This is a new, higher-priority blocker than anything the original seven defects
+  named, and it blocks Phase 1's own done gate too, not just this task.
+- **When.** 2026-09-09.
+- **Where.** Nx target `eval-service:build`, invoked via `pnpm exec nx run`; confirmed with a
+  fresh clone outside `~/Desktop`, offset ports `35433`/`36379`, real AWS.
+
 ---
 
 ## 6. Component ledger
