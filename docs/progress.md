@@ -39,6 +39,8 @@ Format: `YYYY-MM-DD · task · what was demonstrated · who verified`
 - `2026-09-09 · 1.5/1.5b · Phase 1's first-ever real golden-set score: 21/30 passed, pass_rate 0.70, from a genuine fresh clone, real Docker, real AWS Bedrock · 9 failures every one with a real named cause (7x Model Gateway invalid-JSON classification, 2x genuine intent misclassification), run twice, run 2 confirmed a semantic-cache hit (15.5x, byte-identical) by the script's own detection logic — trustworthy number is run 1's cold 0.70 · verified live, CLOSING 1.5 and 1.5b`
 - `2026-09-09 · 1.1 · Bedrock formally closed as the provider decision — already the account in continuous real use since 2026-09-08, never written down until now · no new verification needed, decision recorded`
 - `2026-09-09 · phase 1 · done gate fully met: golden set scores above zero for real reasons (0.70), capability discrimination proven (task 1.2), Conversation Manager returns distinct intents for distinct utterances (this run) · Phase 1 closed except 1.6, blocked on Tavily/Browserbase purchases`
+- `2026-09-09 · 1.6 · corrected the vendor count: five unpurchased vendors named, not two (Anthropic and OpenAI never named before, Browserbase's project id never named, prior Browserbase var name did not exist in code) · verified directly against each service's environment schema, no code changed`
+- `2026-09-09 · 1.6 · three of five vendor secrets already existed in AWS (Tavily, Browserbase API key, E2B) — wired and proven live (resolves clean, proven to fail on a broken reference, restored) · verified against real AWS, committed db4b53e`
 
 ---
 
@@ -50,7 +52,9 @@ logic in design log §30–§33.
 **Phase 1 closed, except 1.6.** 1.0–1.5, 1.5b all closed. 1.1 formally recorded (Bedrock).
 Done gate fully met 2026-09-09: golden set 21/30 (0.70) for real reasons, capability
 discrimination proven, Conversation Manager returns distinct intents live. Only **1.6**
-remains open — blocked on purchasing Tavily and Browserbase accounts, not engineering work.
+remains open — corrected 2026-09-09 to five vendors, three now wired for real (Tavily,
+Browserbase key, E2B); blocked on the Browserbase project ID, two missing AppConfig
+applications (sandbox-service, provisioning-service), and the Anthropic/OpenAI keys.
 
 **3.0** (auto-creation idempotency) **closed 2026-09-08** — idempotency key + partial unique index (migration 0006), proven to fail first and verified against real Postgres. 3.3 (tier) now owns the "does tier belong in the key" question.
 

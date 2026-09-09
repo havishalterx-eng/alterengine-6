@@ -174,6 +174,18 @@ false readings.
       six, and saying otherwise would be the kind of claim this project exists to stop
       making.
 
+      **Partial wiring done 2026-09-09 (`db4b53e`).** Checked AWS directly: Tavily,
+      Browserbase (API key), and E2B secrets already exist for real. Committed and proven
+      live (resolves clean, proven to fail correctly on a broken reference, restored).
+      **Still blocked, three ways:**
+      1. `BROWSERBASE_PROJECT_ID` — not a secret, a literal value nobody has supplied.
+      2. **sandbox-service and provisioning-service have no AppConfig application at all**
+         — only `alterx-engine` and `alterx-tool-gateway` exist. Creating the missing two
+         is new AWS resource creation, blocked by this session's permission boundary;
+         needs Havish's go-ahead or his own two `aws appconfig create-application` calls.
+      3. Anthropic and OpenAI keys still don't exist anywhere in the account — unchanged
+         from above.
+
 **Done when** a 30-case golden set scores above zero for a real reason; a capability
 request for `underwater.basket.weaving` no longer matches a summarisation agent; and the
 Conversation Manager returns different intents for different utterances.
