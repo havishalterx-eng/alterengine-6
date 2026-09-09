@@ -1,7 +1,7 @@
 const http = require("node:http");
 const crypto = require("node:crypto");
 
-const PORT = 4999;
+const PORT = Number(process.env.MOCK_AUTH0_PORT || 4999);
 const ISSUER_DOMAIN = "alterx-local-m2m.test";
 const ISSUER = `https://${ISSUER_DOMAIN}/`;
 const KID = "local-m2m-key-1";
