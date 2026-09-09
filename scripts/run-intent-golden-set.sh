@@ -91,19 +91,18 @@ if [ ! -f "$MODEL_GW_DIST" ] || [ ! -f "$INTENT_DIST" ]; then
 fi
 
 # --- local M2M issuer (gRPC surfaces are behind ServiceAuthGuard) ------------
-node scripts/local-mock-auth0/server.js >/tmp/alter-m2m.log 2>&1 &
+free_port() { "$PY" -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',0)); print(s.getsockname()[1]); s.close()"; }
+M2M_PORT=$(free_port); MG_PORT=$(free_port); MG_HTTP=$(free_port); INTENT_PORT=$(free_port)
+MOCK_AUTH0_PORT="$M2M_PORT" node scripts/local-mock-auth0/server.js >/tmp/alter-m2m.log 2>&1 &
 M2M_PID=$!
 export AUTH0_DOMAIN=alterx-local-m2m.test
-export AUTH0_JWKS_URL=http://127.0.0.1:4999/.well-known/jwks.json
+export AUTH0_JWKS_URL="http://127.0.0.1:$M2M_PORT/.well-known/jwks.json"
 export API_AUDIENCE=https://engine.alter.local
-export AUTH0_M2M_TOKEN_URL=http://127.0.0.1:4999/oauth/token
+export AUTH0_M2M_TOKEN_URL="http://127.0.0.1:$M2M_PORT/oauth/token"
 export AUTH0_M2M_AUDIENCE=https://engine.alter.local
 export AUTH0_M2M_CLIENT_ID=local-dev-client
 export AUTH0_M2M_CLIENT_SECRET=local-dev-secret
 trap 'kill $M2M_PID 2>/dev/null || true' EXIT
-
-free_port() { "$PY" -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',0)); print(s.getsockname()[1]); s.close()"; }
-MG_PORT=$(free_port); MG_HTTP=$(free_port); INTENT_PORT=$(free_port)
 
 # --- model-gateway (Bedrock primary, qwen alias policy seeded in-process) ----
 # eval_bootstrap_bedrock seeds PHASE_1_QWEN_POLICY into a mock mutable store
