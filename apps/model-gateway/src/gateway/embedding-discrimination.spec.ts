@@ -1,18 +1,12 @@
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 
-import {
-  credentials,
-  loadPackageDefinition,
-  type Client,
-  type ServiceClientConstructor,
-} from "@grpc/grpc-js";
-import { loadSync } from "@grpc/proto-loader";
 import { Module } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter } from "@nestjs/platform-fastify";
 import {
   MODELGW_HANDLER,
+  ModelGatewayClient,
   ModelgwGrpcController,
   startModelgwGrpcTransport,
   TitanEmbeddingProvider,
@@ -31,6 +25,13 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { ModelGatewayService } from "./model-gateway.service";
 
+// This test calls the Embed RPC over a real gRPC transport rather than the
+// handler directly, so a defect in the gRPC wire path (proto shape, codec,
+// transport wiring) cannot hide behind an in-process call. Vendor gRPC
+// client construction stays inside ModelGatewayClient (@alterx/adapters) --
+// see docs/CLAUDE.md's architecture boundary law: vendor SDK imports live
+// only under packages/adapters/**, never in apps/*/src.
+
 const CAPABILITY_TEXTS = [
   "text.summarisation\ncontent.writing",
   "text.summarisation",
@@ -42,16 +43,6 @@ const protoPath = resolve(
   "packages/contracts/proto/alter/modelgw/v1/modelgw.proto",
 );
 
-interface ModelgwClient extends Client {
-  embed(
-    request: { tenant_id: string; text: string; dimensions: number },
-    callback: (
-      error: Error | null,
-      response?: { embedding: readonly number[]; dimensions: number },
-    ) => void,
-  ): void;
-}
-
 let handler: ModelgwHandler;
 
 @Module({
@@ -61,11 +52,8 @@ let handler: ModelgwHandler;
 class ModelgwDiscriminationTestModule {}
 
 let app: Awaited<ReturnType<typeof NestFactory.create>> | undefined;
-let client: ModelgwClient | undefined;
 
 afterEach(async () => {
-  client?.close();
-  client = undefined;
   await app?.close();
   app = undefined;
 });
@@ -85,7 +73,7 @@ async function availablePort(): Promise<number> {
   });
 }
 
-async function startGateway(embeddingProvider: EmbeddingProvider): Promise<ModelgwClient> {
+async function startGateway(embeddingProvider: EmbeddingProvider): Promise<ModelGatewayClient> {
   handler = new ModelGatewayService(
     createMockConfigProvider(),
     createMockModelProvider(),
@@ -113,33 +101,15 @@ async function startGateway(embeddingProvider: EmbeddingProvider): Promise<Model
     protoPath,
   });
   await app.init();
-  const definition = loadPackageDefinition(loadSync(protoPath, { keepCase: true })) as unknown as {
-    alter: { modelgw: { v1: { ModelgwService: ServiceClientConstructor } } };
-  };
-  client = new definition.alter.modelgw.v1.ModelgwService(
-    `127.0.0.1:${port}`,
-    credentials.createInsecure(),
-  ) as unknown as ModelgwClient;
-  return client;
+  return new ModelGatewayClient({ address: `127.0.0.1:${port}`, protoPath });
 }
 
-function embed(client: ModelgwClient, text: string): Promise<readonly number[]> {
-  return new Promise((resolveEmbedding, reject) => {
-    client.embed(
-      { tenant_id: "verification", text, dimensions: 512 },
-      (error, response) => {
-        if (error !== null) return reject(error);
-        if (
-          response === undefined ||
-          response.dimensions !== 512 ||
-          response.embedding.length !== 512
-        ) {
-          return reject(new Error("Embed RPC did not return a 512-dimension vector"));
-        }
-        resolveEmbedding(response.embedding);
-      },
-    );
-  });
+async function embed(client: ModelGatewayClient, text: string): Promise<readonly number[]> {
+  const response = await client.embed({ tenant_id: "verification", text, dimensions: 512 });
+  if (response.dimensions !== 512 || response.embedding.length !== 512) {
+    throw new Error("Embed RPC did not return a 512-dimension vector");
+  }
+  return response.embedding;
 }
 
 function cosine(left: readonly number[], right: readonly number[]): number {
@@ -153,7 +123,7 @@ function cosine(left: readonly number[], right: readonly number[]): number {
   );
 }
 
-async function assertDiscrimination(client: ModelgwClient): Promise<void> {
+async function assertDiscrimination(client: ModelGatewayClient): Promise<void> {
   const vectors = await Promise.all(
     CAPABILITY_TEXTS.map((text) => embed(client, text)),
   );

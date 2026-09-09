@@ -450,6 +450,7 @@ export {
 export {
   ModelGatewayClient,
   type ModelGatewayClientConfig,
+  type ModelGatewayEmbedHandler,
   type ModelGatewayHandler,
   type ModelGatewayStreamHandler,
 } from "./grpc/modelgw-client";

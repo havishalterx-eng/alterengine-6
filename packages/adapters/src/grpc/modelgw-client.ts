@@ -8,6 +8,8 @@ import {
 import { loadSync } from "@grpc/proto-loader";
 
 import type {
+  ModelgwEmbedRequest,
+  ModelgwEmbedResponse,
   ModelgwInvokeRequest,
   ModelgwInvokeResponse,
   ModelgwStreamRequest,
@@ -34,6 +36,10 @@ export interface ModelGatewayStreamHandler {
   stream(request: ModelgwStreamRequest): AsyncIterable<ModelgwStreamResponse>;
 }
 
+export interface ModelGatewayEmbedHandler {
+  embed(request: ModelgwEmbedRequest): Promise<ModelgwEmbedResponse>;
+}
+
 interface ModelgwGrpcClient extends Client {
   invoke(
     request: ModelgwInvokeRequest,
@@ -55,13 +61,27 @@ interface ModelgwGrpcClient extends Client {
     metadata: Metadata,
     options: { readonly deadline: Date },
   ): ClientReadableStream<ModelgwStreamResponse>;
+  embed(
+    request: ModelgwEmbedRequest,
+    options: { readonly deadline: Date },
+    callback: (error: Error | null, response?: ModelgwEmbedResponse) => void,
+  ): void;
+  embed(
+    request: ModelgwEmbedRequest,
+    metadata: Metadata,
+    options: { readonly deadline: Date },
+    callback: (error: Error | null, response?: ModelgwEmbedResponse) => void,
+  ): void;
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_STREAM_TIMEOUT_MS = 120_000;
 
 export class ModelGatewayClient
-  implements ModelGatewayHandler, ModelGatewayStreamHandler
+  implements
+    ModelGatewayHandler,
+    ModelGatewayStreamHandler,
+    ModelGatewayEmbedHandler
 {
   readonly #client: ModelgwGrpcClient;
   readonly #timeoutMs: number;
@@ -118,6 +138,25 @@ export class ModelGatewayClient
       };
       if (this.#accessTokenProvider === undefined) this.#client.invoke(request, { deadline }, callback);
       else void serviceAuthorizationMetadata(this.#accessTokenProvider).then((metadata) => this.#client.invoke(request, metadata, { deadline }, callback), reject);
+    });
+  }
+
+  async embed(request: ModelgwEmbedRequest): Promise<ModelgwEmbedResponse> {
+    return new Promise<ModelgwEmbedResponse>((resolve, reject) => {
+      const deadline = new Date(Date.now() + this.#timeoutMs);
+      const callback = (error: Error | null, response?: ModelgwEmbedResponse) => {
+        if (error !== null) {
+          reject(error);
+          return;
+        }
+        if (response === undefined) {
+          reject(new Error("Model Gateway returned an empty embed response"));
+          return;
+        }
+        resolve(response);
+      };
+      if (this.#accessTokenProvider === undefined) this.#client.embed(request, { deadline }, callback);
+      else void serviceAuthorizationMetadata(this.#accessTokenProvider).then((metadata) => this.#client.embed(request, metadata, { deadline }, callback), reject);
     });
   }
 
