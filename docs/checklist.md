@@ -83,12 +83,13 @@ false readings.
       matters most: wiring real providers into a stack nobody has confirmed still starts is
       a bad trade. *Prompt issued 2026-09-08,
       [`prompts/revive-01-environment.md`](prompts/revive-01-environment.md).*
-- [ ] **1.1 provider account procurement.** Bedrock or Anthropic direct. Both adapters
-      exist (`BedrockModelProvider`, `anthropic-model-provider`); secret references already
-      declared. Bedrock keeps one AWS account and one IAM story and is the only route to
-      Titan embeddings, which the vector column is already sized for at 512 dimensions.
-      Anthropic direct is faster to obtain and simpler to bill but leaves embeddings needing
-      a second vendor.
+- [x] **1.1 provider account procurement. CLOSED 2026-09-09 — Bedrock, already the running
+      decision, now recorded as one.** Never formally decided in writing until now, but it's
+      been the actual account in continuous use since 2026-09-08: real Titan embeddings
+      (task 1.2), real `qwen.qwen3-32b-v1:0` invocations, most recently task 1.5's live
+      golden-set run. One AWS account, one IAM story, the only route to Titan embeddings the
+      vector column is already sized for. Anthropic direct was never procured — no gap, this
+      closes the decision the running system already made.
 - [x] **1.2 embeddings — the quieter half. CLOSED 2026-09-08.** Titan wired behind the
       `Embed` RPC, Bedrock bypassing LocalStack with a fatal guard,
       `MODEL_GATEWAY_EMBEDDING_PROVIDER=titan` as a local opt-in that AppConfig cannot
@@ -135,20 +136,19 @@ false readings.
       configuration alone. **Convention for anything new: `/alter/<env>/<service>/<kebab-case>`.**
       *Prompt ready [`prompts/revive-14-secrets-plumbing.md`](prompts/revive-14-secrets-plumbing.md)
       — needs `secretsmanager:CreateSecret` granted first.*
-- [!] **1.5 re-run everything — the point of the phase.** Code and artefacts merged; **the
-      measurement is not done.** The runner has never executed — one live attempt surfaced
-      seven defects, the worst being that the golden sets are absent from the database it
-      reads, so it would report an empty set as a zero. Split out as **1.5b**, which merged
-      its seven fixes (PR #7, 2026-09-09) but still has not produced a real number — now
-      blocked on **C26** (Nx cold-graph computation on a clean checkout). 1.5 and 1.5b share
-      one remaining deliverable: the live number. Original scope: Bedrock is **already** the model
-      provider under appconfig; the work is binding the four aliases (`FAST`, `STANDARD`,
-      `ADVANCED`, `CEILING`) to real model ids, all starting on `qwen.qwen3-32b-v1:0` so the
-      first numbers measure the engine rather than a tier-mapping guess. *Prompt ready
-      [`prompts/revive-15-real-model-golden-sets.md`](prompts/revive-15-real-model-golden-sets.md).* Re-run the eval golden sets
-      against the real provider. **Expect bad scores and treat them as signal, not
-      failure** — first time these components have been measured against something that can
-      tell right from wrong. Record every pre-provider score as void beforehand.
+- [x] **1.5 re-run everything — the point of the phase. CLOSED 2026-09-09.** Real number
+      obtained from a genuine clean checkout, real Docker, real AWS Bedrock (PR #8,
+      `50edf30`): **21/30 passed, pass_rate 0.70.** 9 failures grouped by real cause — 7x
+      Model Gateway returning invalid JSON for classification content (`INTERNAL` gRPC
+      error), 2x genuine intent misclassification (`workflow`→`execute`, `execute`→`plan`).
+      Not infra noise — every failure has a real, named reason, satisfying Phase 1's done
+      gate. Run twice per the script's own design: run 2 hit the semantic cache (15.5x
+      speedup, byte-identical output to run 1) exactly as the script's own cache-detection
+      logic is built to catch — **the trustworthy number is run 1's cold 0.70, not run 2's.**
+      This is Phase 1's first real post-provider score, ever — every prior number was void
+      per standing rule 11. The 7x JSON-format failures are a real, distinct signal about
+      model output reliability, not something Phase 1 committed to fixing — worth its own
+      ticket, not chased here.
 
 - [ ] **1.6 [+] finish reproducibility for the gateway services.** audit-service and
       cost-ledger-service bring up from committed configuration; model-gateway, tool-gateway,
@@ -162,6 +162,12 @@ false readings.
 **Done when** a 30-case golden set scores above zero for a real reason; a capability
 request for `underwater.basket.weaving` no longer matches a summarisation agent; and the
 Conversation Manager returns different intents for different utterances.
+
+**All three met, 2026-09-09.** Golden set: 21/30 (0.70), real reasons (task 1.5). Capability
+discrimination: real Titan embeddings score `underwater.basket.weaving` at 0.12 against a
+0.6 threshold vs 0.86 for the genuinely relevant capability (task 1.2). Conversation
+Manager: the same golden-set run returned five distinct, mostly-correct intents
+(`plan`/`modify`/`execute`/`answer`/`workflow`) across 30 different utterances, live.
 
 ---
 
@@ -418,16 +424,11 @@ demo.
       different from what anyone runs. **This blocks task 1.5's live measurement**, and it is
       the mechanism the assessment blamed for two wrong counts, still present after task 1.0.
       Needs a bootstrap script that generates and propagates the values, committed.
-- [!] **1.5b [+] make the golden-set runner actually run.** **PR #7 merged 2026-09-09**
-      (`2e2c498`) after real CI green, confirmed on the API. The seven originally-named
-      defects are fixed and merged. **But 1.5b's own done gate — a real number from a clean
-      checkout — has never been reached, by anyone, twice now.** First clean-checkout
-      attempt found an eighth, separate gap: nobody runs `pnpm install`, and nothing tells
-      you to (fresh clone has no `node_modules`; the outer `2>&1 | tee` wrapper silently
-      swallowed the resulting failure and reported a false success). Fixed by hand for this
-      attempt only, not committed anywhere yet. Second attempt, with dependencies installed,
-      hit **C26** below: `pnpm exec nx run eval-service:build` genuinely never returns in
-      reasonable time. **Blocked on C26.** Not phase-closing.
+- [x] **1.5b [+] make the golden-set runner actually run. CLOSED 2026-09-09.** PR #7 merged
+      (`2e2c498`, seven originally-named defects). PR #8 merged (`50edf30`, C26's Nx-bypass
+      fix plus the `pnpm install` gap). Done gate met for real: a genuine fresh clone, no
+      hand-editing, real Docker, real AWS, produced Phase 1's first real golden-set number —
+      21/30 passed, 0.70. See 1.5 above for the number and what it means.
 - [ ] **C23 the health check must verify identity, not just status.** It asserts HTTP 200 and
       never asserts the responder is the service it asked for. Live, that produced three false
       passes against a sibling stack's processes — and probing **eval-service**'s port returned
@@ -441,23 +442,21 @@ demo.
 - [ ] **C25 no root `eslint.config` file exists anywhere in the repo**, despite `lint` being a
       real, invoked target. Found while tracing a dependency-scan advisory to `@nx/eslint`; not
       investigated further — surfaced for someone to look at.
-- [ ] **C26 Nx graph computation on a cold, fresh clone is unusably slow, blocking 1.5/1.5b.**
-      `pnpm exec nx run eval-service:build` — a target whose actual work (`uv sync --frozen`)
-      takes 0.283s run directly — ran at 95–99% CPU continuously for 14+ minutes on a genuine
-      fresh clone and was killed, never having returned. CI never sees this: `CLAUDE.md`
-      confirms the `gate` job restores Nx's computation cache via `actions/cache@v4` before
-      running anything, so CI is never actually cold. **Blocks any real clean-checkout
-      verification**, not just this one target — every builder clones fresh per standing
-      rule 7, so every builder's first Nx invocation of anything pays this same unmeasured
-      cost. Two independent people (the original builder, then the CEO session) both hit
-      this and both read it as a hang rather than a defect, because nothing prints while Nx
-      computes the graph. Root cause not diagnosed — could be graph size, a misconfigured
-      plugin, or network calls during graph construction. Needs a builder to actually
-      profile it (`NX_VERBOSE_LOGGING=true`, or `nx graph` timed on its own) rather than
-      another blind retry. **A companion gap surfaced getting here, already worked around by
-      hand but not fixed:** a genuinely fresh clone has no `node_modules`, and neither the
-      runner script nor `docs/local-dev.md`'s Prerequisites section says to run
-      `pnpm install` — fold that into this same task's fix.
+- [x] **C26 Nx graph computation on a cold, fresh clone is unusably slow, blocking 1.5/1.5b.
+      CLOSED 2026-09-09** (PR #8, `50edf30`). `pnpm exec nx run eval-service:build` ran
+      95–99% CPU for 14+ minutes on a genuine fresh clone and was killed, never returning —
+      confirmed independent of sandboxing, independent of the Python virtualenv, independent
+      of git performance. Nx's own project-graph computation is separately fast (its daemon
+      log: `createProjectGraph()` in 20.9ms) — the slowness is specific to this invocation's
+      task orchestration/hashing, isolated but **not fully root-caused** (V8 sampling showed
+      time inside string/hash-table primitives, consistent with hashing a large in-memory
+      structure). **Fixed by not depending on the answer:** `scripts/run-intent-golden-set.sh`
+      no longer routes through `pnpm exec nx run <target>` for its build steps — it runs the
+      same underlying commands each `project.json` target already defines, directly, in the
+      real dependency order. Proven: the full sequence, direct, took 12.4s; confirmed
+      identical dist output files. Companion gap fixed in the same PR: a genuinely fresh
+      clone has no `node_modules`, and neither the runner nor `docs/local-dev.md`'s
+      Prerequisites said to run `pnpm install` first — both now do.
 - [ ] **C22 the bootstrap breaks real AWS.** C21 fills `AWS_ACCESS_KEY_ID` and
       `AWS_SECRET_ACCESS_KEY` from LocalStack placeholders, and environment variables beat the
       `~/.aws` profile — so sourcing the generated file returns `InvalidClientTokenId` while

@@ -678,6 +678,80 @@ Every entry: **What / Why / How / When / Where.**
 - **Where.** Nx target `eval-service:build`, invoked via `pnpm exec nx run`; confirmed with a
   fresh clone outside `~/Desktop`, offset ports `35433`/`36379`, real AWS.
 
+### C26 closed, and Phase 1 gets its first real number — Havish authorized building directly
+
+**What.** Havish explicitly said "build everything yourself," scoped to concluding Phase 1
+completely — the documented exception in `docs/ceo-session-bootstrap.md` §1, for this task
+only. The CEO session built C26's fix directly rather than writing another master prompt.
+
+**Diagnosis, before the fix.** Isolated the cause methodically rather than guessing once:
+- Ruled out sandboxing — reproduced the same hang with the session's own sandbox disabled.
+- Ruled out the Python virtualenv — reproduced with `.venv` deleted before the run.
+- Ruled out git performance — `git status` 84ms, `git ls-files` 18ms, 2538 tracked files,
+  nothing pathological.
+- Ruled out project-graph computation itself — the Nx daemon's own log showed
+  `createProjectGraph()` completing in **20.9ms**, `build-project-configs` in 532ms. The
+  graph was never the bottleneck.
+- V8 process sampling (`sample <pid> 6`) during the hang showed the hot path inside
+  `v8::internal::MicrotaskQueue::RunMicrotasks`, with the leaf frames dominated by
+  `String::ComputeAndSetRawHash`, `EphemeronHashTable`, `OrderedHashMap` — consistent with
+  hashing a large in-memory JS structure repeatedly, not file I/O and not a deadlock (the
+  process held 95–99% CPU the entire time, never idle).
+- **Not fully root-caused.** The specific structure being hashed, and why it's expensive
+  every invocation despite a warm daemon-side graph cache, was not identified. Recorded
+  honestly as unknown rather than guessed at.
+
+**The fix, once isolated.** Nx's own value here — cross-project build caching — buys
+nothing for a script that only ever builds these same handful of targets once per run.
+Rewrote `scripts/run-intent-golden-set.sh` to run the identical underlying commands each
+`project.json` target already defines (`tsc -p ...`, `uv sync --frozen`, `uv run alembic
+upgrade head`, the two `copy-build-assets.mjs` scripts), directly, in the same dependency
+order Nx would have used (`contracts` → `shared-clients`/`adapters`/`auth` → the eval
+processes). Proven before shipping: the full sequence, direct, took **12.4 seconds**;
+confirmed the resulting `dist/` output files existed and matched what the runner expects.
+Also fixed the companion gap from the entry above: the runner now checks for `node_modules`
+and runs `pnpm install` if missing; `docs/local-dev.md`'s Prerequisites section now says to
+run it too.
+
+**Verified for real, end to end, from a genuine fresh clone** (not the CEO's docs clone, not
+the earlier partially-warmed clone — a clean `git clone` at the merge commit): real Docker,
+real AWS Bedrock, offset ports beside every sibling stack, no hand-editing. Produced Phase
+1's first-ever real golden-set number:
+
+> **21/30 passed, pass_rate = 0.70.** 9 failures, every one with a real, named cause — 7×
+> `INTERNAL: Model Gateway returned invalid JSON for classification content`, 2× genuine
+> intent misclassification (`workflow`→`execute` on "Execute the monthly billing workflow";
+> `execute`→`plan` on "Create a new sandbox for this run").
+
+**The script's own cache-detection logic did its job.** Run 2 (same script, same process)
+came back at `ratio=15.5x` (9.18s → 0.59s) with byte-identical per-case output to run 1 —
+exactly the semantic-cache-hit signature the script exists to catch, not a second
+independent measurement. **The number that counts is run 1's cold 0.70.**
+
+**What this closes.** Phase 1's own done gate (`checklist.md` line ~161) had three
+conditions; task 1.2 already proved the second (capability discrimination), and this run
+proves the first (a real, non-zero, real-reason score) and the third (the Conversation
+Manager visibly returning five distinct intents across the 30 utterances) in the same
+breath. **All three are now met.** 1.5 and 1.5b both close. 1.1 (provider procurement) also
+closes — Bedrock has been the account in continuous use since 2026-09-08 and was simply
+never written down as a decision until now.
+
+**What this deliberately does not close.** The 7× JSON-format failures are a real signal
+about model output reliability, not a Phase 1 obligation — Phase 1's own text says "expect
+bad scores and treat them as signal, not failure." Not chased here; worth its own ticket if
+Havish wants it tracked, since it recurs identically in both runs (not noise).
+
+**What's left in Phase 1.** Only **1.6** — gateway reproducibility for model-gateway,
+tool-gateway, sandbox-service, provisioning-service — blocked on purchasing Tavily and
+Browserbase accounts, which is not engineering work and not something a build session can
+close. Everything else in Phase 1 is now closed.
+
+**Status.** Merged: PR #8 (`50edf30`), squash, branch kept. CI confirmed green directly
+against the API before merge.
+- **When.** 2026-09-09.
+- **Where.** `scripts/run-intent-golden-set.sh`, `docs/local-dev.md`,
+  `havishalterx-eng/alterengine-6#8`.
+
 ---
 
 ## 6. Component ledger

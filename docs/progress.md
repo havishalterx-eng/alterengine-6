@@ -34,6 +34,11 @@ Format: `YYYY-MM-DD · task · what was demonstrated · who verified`
 - `2026-09-09 · 1.5b · seven named defects addressed per commit history; empty-golden-set guard spot-checked directly against source, exits 3 with exact message; PR #7 pushed and watched to completion · CI red on eval-service:typecheck (6 real mypy errors), not the hang the builder report named as blocking — NOT merged, NOT closing 1.5b`
 - `2026-09-09 · 1.5b · six mypy type annotations fixed (f4bc44c), full-file mypy and ruff independently rerun clean, PR #7 pushed and watched to completion · CI green confirmed directly against the API, PR #7 squash-merged, branch kept`
 - `2026-09-09 · 1.5b/1.5 · attempted the actual done gate (real number from a clean checkout) for the first time ever, by anyone · found a genuine clean clone has no node_modules and nothing says to run pnpm install; after installing, pnpm exec nx run eval-service:build ran 14+ minutes at 95-99% CPU and was killed, never returning, while the same target's real work (uv sync --frozen) took 0.283s run directly · NOT closing 1.5 or 1.5b — new blocker C26 opened`
+- `2026-09-09 · C26 · root cause isolated to Nx task orchestration, not project-graph computation (daemon log: createProjectGraph() in 20.9ms), not sandboxing, not the venv, not git · confirmed by direct process sampling and elimination testing`
+- `2026-09-09 · C26 · runner rewritten to run each target's underlying command directly instead of through pnpm exec nx run; full sequence timed at 12.4s, dist outputs confirmed present · PR #8 (50edf30) merged after real CI green confirmed on the API`
+- `2026-09-09 · 1.5/1.5b · Phase 1's first-ever real golden-set score: 21/30 passed, pass_rate 0.70, from a genuine fresh clone, real Docker, real AWS Bedrock · 9 failures every one with a real named cause (7x Model Gateway invalid-JSON classification, 2x genuine intent misclassification), run twice, run 2 confirmed a semantic-cache hit (15.5x, byte-identical) by the script's own detection logic — trustworthy number is run 1's cold 0.70 · verified live, CLOSING 1.5 and 1.5b`
+- `2026-09-09 · 1.1 · Bedrock formally closed as the provider decision — already the account in continuous real use since 2026-09-08, never written down until now · no new verification needed, decision recorded`
+- `2026-09-09 · phase 1 · done gate fully met: golden set scores above zero for real reasons (0.70), capability discrimination proven (task 1.2), Conversation Manager returns distinct intents for distinct utterances (this run) · Phase 1 closed except 1.6, blocked on Tavily/Browserbase purchases`
 
 ---
 
@@ -42,7 +47,12 @@ Format: `YYYY-MM-DD · task · what was demonstrated · who verified`
 **Phase 0 closed.** All five decisions answered with rationale, no code changed. Derived
 logic in design log §30–§33.
 
-**Phase 1 in progress.** 1.0 running. 1.1 verified live — credentials, region and Titan
-access all confirmed by real call. 1.2 prompt ready. 1.3, 1.4, 1.5 not started.
+**Phase 1 closed, except 1.6.** 1.0–1.5, 1.5b all closed. 1.1 formally recorded (Bedrock).
+Done gate fully met 2026-09-09: golden set 21/30 (0.70) for real reasons, capability
+discrimination proven, Conversation Manager returns distinct intents live. Only **1.6**
+remains open — blocked on purchasing Tavily and Browserbase accounts, not engineering work.
 
 **3.0** (auto-creation idempotency) **closed 2026-09-08** — idempotency key + partial unique index (migration 0006), proven to fail first and verified against real Postgres. 3.3 (tier) now owns the "does tier belong in the key" question.
+
+**Phase 2 (healing loop) unblocked, not started.** Phase 0's 0.1/0.2 decisions are closed;
+nothing else gates it.
