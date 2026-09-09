@@ -21,6 +21,8 @@ Format: `YYYY-MM-DD · task · what was demonstrated · who verified`
 - `2026-09-08 · 1.0 · regression check written and proven to fail by stopping redis · committed, NOT yet wired into CI (C16)`
 - `2026-09-09 · C21 · env bootstrap committed, --check wired into CI gate · verified, first artefact in the project to acquire a driver`
 - `2026-09-09 · C16 · ten containers up on offset ports beside two untouched sibling stacks; row written to this stack's engine-db on 15433 and read back from 15433 only · verified live`
+- `2026-09-09 · ci · fixed architecture boundary violation (task 1.2's spec importing @grpc/grpc-js directly) that had failed every gate job for six merges · verified on the real CI runner, not just locally`
+- `2026-09-09 · ci · fixed dependency scan: removed unused @nx/next (2 critical Next.js RCEs + sharp + svgo advisories), bumped vitest 4.1.10→4.1.11 (2 moderate advisories), regenerated a stale baseline · verified, full CI run green including test platform api and both its integration suites`
 - `2026-09-08 · 1.4 · all eight committed AWS references resolve; audit-service and cost-ledger-service brought up from committed config alone · verified, check proven to fail`
 - `2026-09-08 · 1.3 · six Node services answering under ALTER_CONFIG_SOURCE=appconfig against real AWS · verified by direct health responses on ports 3133-3138`
 - `2026-09-08 · 1.3 · embedding provenance recorded and stale vectors excluded fail-closed · verified, proven to fail without the filter`

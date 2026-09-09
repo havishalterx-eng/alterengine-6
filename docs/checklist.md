@@ -430,6 +430,9 @@ demo.
       the fourteen dependency ports and every connection URL; application service ports stayed
       literal. So the health check probes defaults, and on a machine with sibling checkouts the
       defaults belong to someone else. Same footgun, one layer up.
+- [ ] **C25 no root `eslint.config` file exists anywhere in the repo**, despite `lint` being a
+      real, invoked target. Found while tracing a dependency-scan advisory to `@nx/eslint`; not
+      investigated further — surfaced for someone to look at.
 - [ ] **C22 the bootstrap breaks real AWS.** C21 fills `AWS_ACCESS_KEY_ID` and
       `AWS_SECRET_ACCESS_KEY` from LocalStack placeholders, and environment variables beat the
       `~/.aws` profile — so sourcing the generated file returns `InvalidClientTokenId` while
@@ -505,7 +508,11 @@ demo.
    writes them; builders read them and report. Otherwise "what we decided" and "what a
    builder believed we decided" stop being distinguishable — which is the ambiguity these
    files exist to remove. Every master prompt must say so.
-9. **Grade review depth by blast radius.** Model Gateway has five direct dependents; a
+9. **Never trust a merge without checking CI to completion.** Six merges in a row went red
+   before anyone looked — the verification standard was written while its own enforcement
+   was silently broken. `git push` then `gh run watch <id> --exit-status`, reading the real
+   step list, every time. A local pass is not evidence a CI runner will agree.
+10. **Grade review depth by blast radius.** Model Gateway has five direct dependents; a
    read-only registry does not.
-10. **Record pre-provider scores as void before Phase 1 lands.** The first honest measurement
+11. **Record pre-provider scores as void before Phase 1 lands.** The first honest measurement
    will look like a regression, and someone will read it as one.
