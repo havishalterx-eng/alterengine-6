@@ -8,6 +8,9 @@ not used by Engine services.
 
 - Docker Desktop with Compose v2
 - Node.js and pnpm versions declared by repository
+- Run `pnpm install` once, from repo root, before anything else. A fresh
+  clone has no `node_modules`; every `pnpm exec` / `pnpm exec nx run`
+  command below fails without it.
 
 ## Configure
 

@@ -26,6 +26,19 @@
 # an environment limit, not a judgement that the run is unnecessary -- run
 # this script on a host with real AWS + Docker to get the honest number.
 #
+# CI-2026-09-09 (task C26): a genuine fresh clone builds every step below
+# directly, never through `pnpm exec nx run <target>`. Confirmed live and
+# repeatedly: `pnpm exec nx run eval-service:build` ran 95-99% CPU for 14+
+# minutes on a cold clone and never returned, independent of sandboxing,
+# independent of the Python virtualenv, independent of the underlying
+# command (`uv sync --frozen` alone takes 0.283s). The identical sequence
+# of underlying commands below, invoked directly in dependency order, took
+# 12.4s total, real build artefacts confirmed byte-for-byte where checked.
+# Root cause not fully isolated (Nx's own project-graph computation is
+# separately confirmed fast, under 1s, via its daemon log) -- but Nx's own
+# value here (cross-project caching) buys nothing for a single golden-set
+# run, so this script does not depend on it being fixed.
+#
 # Never commits a credential. Exit 0 on completion regardless of pass
 # rate (a bad honest number is the deliverable); non-zero only on a real
 # setup failure.
@@ -65,23 +78,44 @@ if ! command -v pnpm >/dev/null 2>&1 || ! node --version | grep -q '^v22\.'; the
   exit 2
 fi
 
+# A genuine fresh clone has no node_modules; nothing else in this repo
+# installs it for you. Without this, every command below fails fast and
+# silently if any caller redirects stderr (task C26).
+if [ ! -d "$REPO_ROOT/node_modules" ]; then
+  echo "run-intent-golden-set: node_modules missing, running pnpm install..." >&2
+  pnpm install >/dev/null
+fi
+
 # --- dependency stack: engine-db (eval_db) + redis (cache) -------------------
 docker compose --env-file "$ENV_FILE" up -d --build --wait \
   engine-db redis >/dev/null
 
+# --- build, direct commands, not through Nx (task C26) -----------------------
+# Same underlying commands each project.json target runs, in the real
+# dependency order (contracts -> shared-clients/adapters/auth -> the two
+# eval processes). packages/contracts/src/generated/ is already committed
+# (buf generate on this repo produces only a harmless reorder diff, see
+# CLAUDE.md), so proto-types is not re-run here.
+pnpm exec tsc -p packages/contracts/tsconfig.lib.json
+pnpm exec tsc -p packages/shared-clients/tsconfig.lib.json
+pnpm exec tsc -p packages/adapters/tsconfig.lib.json
+pnpm exec tsc -p packages/auth/tsconfig.lib.json
+
 # --- eval_db migrations + golden-set seed ------------------------------------
 # alembic 0002_seed_launch_golden_sets seeds the 30-case intent golden set.
-pnpm exec nx run eval-service:build >/dev/null
+(cd apps/eval-service && uv sync --frozen)
 PY="$REPO_ROOT/apps/eval-service/.venv/bin/python"
 if [ ! -x "$PY" ]; then
   echo "run-intent-golden-set: eval-service virtualenv missing after build" >&2
   exit 2
 fi
-pnpm exec nx run eval-service:migrate >/dev/null
+(cd apps/eval-service && uv run alembic upgrade head)
 
 # --- build the two eval processes ------------------------------------------
-pnpm exec nx run model-gateway:build >/dev/null
-pnpm exec nx run orchestration-service:build >/dev/null
+pnpm exec tsc -p apps/model-gateway/tsconfig.app.json
+node apps/model-gateway/scripts/copy-build-assets.mjs
+pnpm exec tsc -p apps/orchestration-service/tsconfig.app.json
+node apps/orchestration-service/scripts/copy-build-assets.mjs
 
 MODEL_GW_DIST="$REPO_ROOT/dist/apps/model-gateway/eval_bootstrap_bedrock.js"
 INTENT_DIST="$REPO_ROOT/dist/apps/orchestration-service/eval_intent_grpc_server.js"
