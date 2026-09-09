@@ -152,12 +152,27 @@ false readings.
 
 - [ ] **1.6 [+] finish reproducibility for the gateway services.** audit-service and
       cost-ledger-service bring up from committed configuration; model-gateway, tool-gateway,
-      sandbox-service and provisioning-service do not, because they read
-      `ANTHROPIC_API_KEY_SECRET_REF`, `TAVILY_API_KEY_SECRET_REF` and
-      `BROWSERBASE_API_KEY_REFERENCE` — none of which are committed, and two of which name
-      vendors that have not been purchased. **Blocked on those purchases, not on engineering.**
-      Until then the AppConfig path is reproducible for two services out of six, and saying
-      otherwise would be the kind of claim this project exists to stop making.
+      sandbox-service and provisioning-service do not. **Corrected 2026-09-09 — the vendor
+      list was incomplete.** Verified directly against each service's environment schema
+      (`requireValue`/`required`, all gated behind `ALTER_CONFIG_SOURCE=appconfig`, none
+      needed under `mock`): **five vendors, not two.**
+      - `ANTHROPIC_API_KEY_SECRET_REF` — model-gateway. Required to boot even though
+        Bedrock is the actual provider decision (task 1.1).
+      - `OPENAI_API_KEY_SECRET_REF` — model-gateway. Never named anywhere in the record
+        before now.
+      - `TAVILY_API_KEY_SECRET_REF` — tool-gateway.
+      - `BROWSERBASE_API_KEY_REF` + `BROWSERBASE_PROJECT_ID` — tool-gateway **and**
+        sandbox-service, both required. (Previously recorded as
+        `BROWSERBASE_API_KEY_REFERENCE`, the wrong name, and missing the project ID.)
+      - `E2B_API_KEY_REF` — sandbox-service **and** provisioning-service. Never named
+        anywhere in the record before now.
+
+      **Blocked on those five purchases, not on engineering** — or on an explicit decision
+      to cut any of them (Anthropic and OpenAI being hard-required for a service that
+      never calls either provider is worth challenging on its own, separately from
+      procurement). Until then the AppConfig path is reproducible for two services out of
+      six, and saying otherwise would be the kind of claim this project exists to stop
+      making.
 
 **Done when** a 30-case golden set scores above zero for a real reason; a capability
 request for `underwater.basket.weaving` no longer matches a summarisation agent; and the

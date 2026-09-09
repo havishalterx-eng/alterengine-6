@@ -752,6 +752,48 @@ against the API before merge.
 - **Where.** `scripts/run-intent-golden-set.sh`, `docs/local-dev.md`,
   `havishalterx-eng/alterengine-6#8`.
 
+### 1.6's vendor count was wrong — five, not two
+
+**What.** Havish asked what closes 1.6. The checklist named two unpurchased vendors,
+Tavily and Browserbase. Verified directly against each affected service's environment
+schema rather than trusting the existing text, and found it undercounted:
+
+- `ANTHROPIC_API_KEY_SECRET_REF` — `requireValue` in model-gateway's `appconfig` branch
+  (`apps/model-gateway/src/config/environment.ts:202-205`). Required to boot even though
+  Bedrock is the actual, decided provider (task 1.1). Never purchased.
+- `OPENAI_API_KEY_SECRET_REF` — same file, same branch, immediately after. Never named
+  anywhere in the record before this check.
+- `BROWSERBASE_API_KEY_REF` **and** `BROWSERBASE_PROJECT_ID`, both `required` — tool-gateway
+  (`environment.ts:149-151`) and, separately, sandbox-service
+  (`environment.ts:94-98`). The record's prior name,
+  `BROWSERBASE_API_KEY_REFERENCE`, does not exist in the code — grep against source
+  returns zero hits under that name. The project ID requirement was never recorded at all.
+- `E2B_API_KEY_REF`, `required` — sandbox-service (`environment.ts:110`) **and**
+  provisioning-service (`environment.ts:47`). Never named anywhere in the record before
+  this check.
+
+All five confirmed gated behind `if (configSource === "mock") return {...}` — none are
+needed for local mock development, only under `ALTER_CONFIG_SOURCE=appconfig`, which is
+exactly 1.6's scope.
+
+**Why it matters.** This is the same class of error the project keeps naming and keeps
+re-finding: a written list stood in for checking the actual code, and it was wrong by more
+than half. Two purchases were asked for; five are actually needed.
+
+**A design question surfaced, not answered.** Why does model-gateway hard-require an
+Anthropic key and an OpenAI key to boot at all, when Bedrock is the decided provider and
+neither is called? Worth Havish's judgment — cut the requirement, or keep both providers
+genuinely live as fallbacks. Not decided here.
+
+**Status.** Corrected in `checklist.md`. Not closing 1.6 — if anything, this makes it
+larger than recorded. Still blocked on purchases (now five, or fewer if any are cut) plus
+the AWS Secrets Manager wiring, same pattern as task 1.4.
+- **When.** 2026-09-09.
+- **Where.** `apps/model-gateway/src/config/environment.ts`,
+  `apps/tool-gateway/src/config/environment.ts`,
+  `apps/sandbox-service/src/config/environment.ts`,
+  `apps/provisioning-service/src/config/environment.ts`.
+
 ---
 
 ## 6. Component ledger
