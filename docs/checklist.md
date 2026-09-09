@@ -415,11 +415,24 @@ demo.
       different from what anyone runs. **This blocks task 1.5's live measurement**, and it is
       the mechanism the assessment blamed for two wrong counts, still present after task 1.0.
       Needs a bootstrap script that generates and propagates the values, committed.
-- [ ] **1.5b [+] make the golden-set runner actually run.** *Prompt ready
+- [~] **1.5b [+] make the golden-set runner actually run.** *Prompt ready
       [`prompts/revive-15b-make-the-runner-run.md`](prompts/revive-15b-make-the-runner-run.md)
       — **requires Docker**, and the builder must confirm that before accepting.* Seven named
-      defects, all found in one live attempt, none rediscoverable from a sandbox. **Phase 1's
-      last blocker.**
+      defects, all found in one live attempt, none rediscoverable from a sandbox. **PR #7
+      open, CI red — not merged.** All seven fixed and independently verified (empty-set
+      guard reads real source, exits 3, exact message confirmed). **CI's actual failure is
+      not what the builder's report named as the blocker**: `eval-service:typecheck` fails
+      on 6 real mypy errors (untyped defs) in the new `run_intent_golden_set.py` — a
+      trivial fix, confirmed on the real CI runner in ~20s. The builder reported the
+      blocker as `pnpm exec nx run eval-service:build` hanging indefinitely under both
+      Node 20 and Node 22 in a fresh clone — independently reproduced by the CEO session,
+      genuinely hung past 4 minutes with zero output, while the underlying `uv sync
+      --frozen` run directly completes in 13ms. Working theory, not confirmed: cold Nx
+      project-graph computation on a fresh clone with no persisted cache, which CI avoids
+      via its `actions/cache@v4`-restored Nx computation cache (see `CLAUDE.md`) — not a
+      defect in the target itself, since the same target ran in 0.48ms on real CI once the
+      graph was warm. **Not phase-closing.** Next: fix the 6 type annotations, re-push,
+      re-verify CI green before merge.
 - [ ] **C23 the health check must verify identity, not just status.** It asserts HTTP 200 and
       never asserts the responder is the service it asked for. Live, that produced three false
       passes against a sibling stack's processes — and probing **eval-service**'s port returned

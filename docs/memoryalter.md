@@ -585,6 +585,44 @@ Every entry: **What / Why / How / When / Where.**
   halves look complete. This is why the fifth column ("not assessable") exists at all.
 - **Where.** `needs.html`, category definitions.
 
+### 1.5b's reported blocker was not the real one — CI proved a different, trivial cause
+
+- **What.** Task 1.5b's builder report named `pnpm exec nx run eval-service:build` hanging
+  indefinitely (tried under both Node 20 and Node 22, stopped after two attempts per the
+  loop-abort rule, correctly claimed no score) as the reason the runner could not be
+  proven end to end. Independently reproduced: in a fresh clone, that exact command
+  genuinely hung past 4 minutes with zero output, while `uv sync --frozen` — the actual
+  command the `build` target runs — completed in 13ms when invoked directly. So the hang
+  is real, but pushing the branch and opening PR #7 to get a real CI verdict (rule 9)
+  surfaced the actual, different, and much smaller defect: `eval-service:typecheck` fails
+  on **6 real mypy errors** (untyped function defs and one missing generic type argument)
+  in the new `run_intent_golden_set.py`, and CI's `nx affected` sweep — including the same
+  `eval-service:build` target — ran in about 20 seconds with `eval-service:build` itself
+  completing in 0.48ms.
+- **Why both things are true.** CI's `gate` job restores Nx's computation cache from
+  `actions/cache@v4` (documented in `CLAUDE.md`) before running anything. A fresh clone
+  with no persisted cache pays Nx's full project-graph computation cost on its first
+  invocation — for a 15-app, 6-package monorepo, evidently well past 4 minutes. That is a
+  **working theory, not confirmed to completion** — the local repro was killed at the
+  4-minute mark rather than let run to see if it ever finishes. It reads as a hang because
+  nothing prints while Nx builds the graph, and 4 minutes is long enough to look
+  indistinguishable from actually stuck.
+- **Why it matters beyond this one task.** A builder in a fresh clone (which every builder
+  is, per standing rule 7) may hit this exact wall on any first Nx invocation, not just
+  this target, and reasonably conclude something is broken when it is only slow and
+  silent. Worth a named fix — warm the cache first, or add progress output, or document
+  the expected first-run cost — so the next builder doesn't repeat the two-attempt cycle
+  on the same non-defect.
+- **The standing rule earned its keep here.** Rule 9 (never trust a merge without checking
+  CI to completion) is why the real cause surfaced at all — the builder's own diagnosis,
+  taken alone, would have sent the next round chasing a cold-cache theory instead of
+  fixing six one-line type annotations.
+- **Status.** PR #7 open, CI red, not merged. Not closing 1.5b. Genuinely closable in the
+  next round with a small fix. See `checklist.md` 1.5b.
+- **When.** 2026-09-09.
+- **Where.** `apps/eval-service/scripts/run_intent_golden_set.py`,
+  `havishalterx-eng/alterengine-6#7`.
+
 ---
 
 ## 6. Component ledger
