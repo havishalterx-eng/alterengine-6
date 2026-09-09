@@ -52,6 +52,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO_ROOT / "apps" / "eval-service"))
 
 from sqlalchemy import create_engine, event, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.execution.agent_binding_client import AgentBindingEvalClient
@@ -97,13 +98,15 @@ class CaseReport:
     reason: str
 
 
-def _build_engine(db_url: str):
+def _build_engine(db_url: str) -> Engine:
     engine = create_engine(db_url, pool_pre_ping=True)
     # eval_db is forced-RLS and its policy requires both this role and
     # context -- mirror src/grpc_server.py's checkout listener exactly.
     @event.listens_for(engine, "checkout")
-    def _set_eval_service_context(dbapi_connection, _record, _proxy):
-        cursor = dbapi_connection.cursor()
+    def _set_eval_service_context(
+        dbapi_connection: object, _record: object, _proxy: object
+    ) -> None:
+        cursor = dbapi_connection.cursor()  # type: ignore[attr-defined]
         try:
             cursor.execute("SET ROLE eval_service")
             cursor.execute("SET app.eval_internal = 'on'")
@@ -113,7 +116,9 @@ def _build_engine(db_url: str):
     return engine
 
 
-def _build_orchestrator(sessions, intent_target: str) -> EvalRunOrchestrator:
+def _build_orchestrator(
+    sessions: sessionmaker[Session], intent_target: str
+) -> EvalRunOrchestrator:
     intent_client = IntentClient(intent_target)
     # Every other client is an honest unused placeholder.
     verification_client = VerificationClient(_UNUSED)
@@ -171,25 +176,25 @@ def _build_orchestrator(sessions, intent_target: str) -> EvalRunOrchestrator:
     )
 
 
-def _case_reason(details: dict) -> tuple[str | None, str]:
+def _case_reason(details: dict[str, object]) -> tuple[str | None, str]:
     """Return (observed_intent, reason) from an intent case's details."""
     if "error" in details:
         # Real per-case isolation failure (e.g. ClassifyIntent call failed).
         return None, str(details["error"])
     observed = details.get("observed")
     expected = details.get("expected")
-    if observed is None or expected is None:
+    if not isinstance(observed, dict) or not isinstance(expected, dict):
         return None, f"unexpected details shape: {json.dumps(details, sort_keys=True)}"
     observed_intent = observed.get("intent")
     expected_intent = expected.get("intent")
     if observed == expected:
-        return observed_intent, "pass"
-    return observed_intent, (
+        return observed_intent if isinstance(observed_intent, str) else None, "pass"
+    return (observed_intent if isinstance(observed_intent, str) else None), (
         f"observed intent {observed_intent!r} != expected {expected_intent!r}"
     )
 
 
-def _report(sessions, eval_run_id: UUID) -> list[CaseReport]:
+def _report(sessions: sessionmaker[Session], eval_run_id: UUID) -> list[CaseReport]:
     rows = sessions().execute(
         text(
             """
@@ -205,6 +210,8 @@ def _report(sessions, eval_run_id: UUID) -> list[CaseReport]:
     reports: list[CaseReport] = []
     for position, row in enumerate(rows, start=1):
         details = row.details if isinstance(row.details, dict) else json.loads(row.details)
+        if not isinstance(details, dict):
+            raise ValueError("eval result details must be an object")
         observed_intent, reason = _case_reason(details)
         expected_intent = row.expected.get("intent") if isinstance(row.expected, dict) else None
         utterance = row.input.get("utterance") if isinstance(row.input, dict) else None
@@ -221,7 +228,7 @@ def _report(sessions, eval_run_id: UUID) -> list[CaseReport]:
     return reports
 
 
-def _case_count(sessions) -> int:
+def _case_count(sessions: sessionmaker[Session]) -> int:
     return int(
         sessions().execute(
             text(
