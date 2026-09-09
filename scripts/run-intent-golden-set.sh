@@ -44,7 +44,7 @@ set -a; . "$ENV_FILE"; set +a
 
 # This runner calls real Bedrock. LocalStack credentials from .env.local would
 # override the operator's normal AWS credential chain and make that fail.
-unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_ENDPOINT_URL AWS_ENDPOINT_URL_STS
 
 # Migrations and report must read same database. .env.local derives this URL
 # from ENGINE_DB_PORT, so exported port overrides flow through both paths.
