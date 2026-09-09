@@ -46,6 +46,9 @@ reference_vars=(
   DELETION_PSEUDONYM_KEY_REF
   COST_DATABASE_SECRET_REF
   COST_PSEUDONYM_KEY_REF
+  TAVILY_API_KEY_SECRET_REF
+  BROWSERBASE_API_KEY_REF
+  E2B_API_KEY_REF
 )
 
 # Collect the union of existing SSM parameter names and Secrets Manager secret
