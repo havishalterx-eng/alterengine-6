@@ -837,6 +837,48 @@ Anthropic/OpenAI question from the prior entry, unchanged.
 - **Where.** `.env.local.example`, `scripts/check-reference-resolution.sh`,
   `havishalterx-eng/alterengine-6@db4b53e`.
 
+### The Browserbase project ID, found in the actual account, and tool-gateway proven closed
+
+**What.** Havish had a Browserbase dashboard tab open and said to use it, and to confirm the
+account matches the already-stored key. Did both directly rather than asking for the value
+blind.
+
+**Confirming same account without ever printing the raw key.** Read the dashboard's General
+Settings page: org "Alterxtest" (`alterxtest1@gmail.com`, free plan), one project
+("Production project"), Project ID `c214bf9e-3b19-4e5d-8aa4-c55472ce4669`. Revealed the
+masked API key field and, in-page via JavaScript, computed only its length and prefix
+(`35`, `bb_live_`) — never the value itself, which a page-level guard also refused to print
+when asked for a hash. Compared those two facts against the AWS secret's own length and
+prefix, fetched separately (`35`, `bb_live_`): identical. Combined with there being exactly
+one Browserbase project in the org, this is as confirmed as it can be without moving the
+literal key value anywhere.
+
+**Committed the project ID as plain text**, deliberately — Browserbase project IDs are not
+secrets, the dashboard shows this one in the clear, and the code reads it as a literal
+environment variable rather than an AWS reference.
+
+**Then proved it, not just wired it.** Built tool-gateway with the direct-command pattern
+from task C26 (bypassing Nx). Booted it for real: `ALTER_CONFIG_SOURCE=appconfig`, the real
+`alterx-tool-gateway` AppConfig application, real Tavily and Browserbase secrets, a local
+M2M issuer for the Session Gateway guard. First attempt, without the M2M issuer running,
+failed on `Session Gateway M2M configuration is incomplete` — a real, correctly-thrown
+error, and useful confirmation that the vendor secrets themselves resolved cleanly with no
+complaint. Second attempt, M2M wired too: `Nest application successfully started`,
+`GET /health` returned `{"status":"ok","service":"tool-gateway"}` — the exact identity
+check C23's finding asked every health check to make, not just an HTTP 200.
+
+**What this closes and what it doesn't.** tool-gateway is closed under appconfig, for real,
+demonstrated live. sandbox-service and provisioning-service are unchanged — both still have
+no AppConfig application to point at, which is unrelated to the project ID and needs
+Havish's go-ahead or his own two `create-application` calls. model-gateway is unchanged —
+Anthropic and OpenAI keys still don't exist.
+
+**Status.** 1.6: one of four remaining gateway services now closed. Three blocked, all on
+Havish, none on engineering.
+- **When.** 2026-09-10.
+- **Where.** `.env.local.example`, live boot of
+  `dist/apps/tool-gateway/main.js` against real AWS AppConfig and Secrets Manager.
+
 ---
 
 ## 6. Component ledger

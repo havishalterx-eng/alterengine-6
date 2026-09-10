@@ -41,6 +41,7 @@ Format: `YYYY-MM-DD · task · what was demonstrated · who verified`
 - `2026-09-09 · phase 1 · done gate fully met: golden set scores above zero for real reasons (0.70), capability discrimination proven (task 1.2), Conversation Manager returns distinct intents for distinct utterances (this run) · Phase 1 closed except 1.6, blocked on Tavily/Browserbase purchases`
 - `2026-09-09 · 1.6 · corrected the vendor count: five unpurchased vendors named, not two (Anthropic and OpenAI never named before, Browserbase's project id never named, prior Browserbase var name did not exist in code) · verified directly against each service's environment schema, no code changed`
 - `2026-09-09 · 1.6 · three of five vendor secrets already existed in AWS (Tavily, Browserbase API key, E2B) — wired and proven live (resolves clean, proven to fail on a broken reference, restored) · verified against real AWS, committed db4b53e`
+- `2026-09-10 · 1.6 · found the real Browserbase project id in the account itself (dashboard General settings), confirmed same account as the stored key by length+prefix match without ever printing the raw key, committed it plain text · tool-gateway then built direct (not through Nx) and booted for real under real AppConfig with real Tavily/Browserbase secrets: Nest application successfully started, GET /health returned {"status":"ok","service":"tool-gateway"} · verified live, CLOSING tool-gateway`
 
 ---
 
@@ -52,8 +53,9 @@ logic in design log §30–§33.
 **Phase 1 closed, except 1.6.** 1.0–1.5, 1.5b all closed. 1.1 formally recorded (Bedrock).
 Done gate fully met 2026-09-09: golden set 21/30 (0.70) for real reasons, capability
 discrimination proven, Conversation Manager returns distinct intents live. Only **1.6**
-remains open — corrected 2026-09-09 to five vendors, three now wired for real (Tavily,
-Browserbase key, E2B); blocked on the Browserbase project ID, two missing AppConfig
+remains open — corrected 2026-09-09 to five vendors. **tool-gateway closed 2026-09-10**,
+proven live (real AppConfig, real Tavily/Browserbase secrets, real health check). Still
+blocked, two ways, neither engineering: two missing AppConfig
 applications (sandbox-service, provisioning-service), and the Anthropic/OpenAI keys.
 
 **3.0** (auto-creation idempotency) **closed 2026-09-08** — idempotency key + partial unique index (migration 0006), proven to fail first and verified against real Postgres. 3.3 (tier) now owns the "does tier belong in the key" question.

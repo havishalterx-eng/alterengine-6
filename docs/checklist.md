@@ -186,6 +186,24 @@ false readings.
       3. Anthropic and OpenAI keys still don't exist anywhere in the account — unchanged
          from above.
 
+      **`BROWSERBASE_PROJECT_ID` resolved and tool-gateway closed for real, 2026-09-10.**
+      Found the real value directly in Havish's already-open Browserbase dashboard tab
+      (org "Alterxtest", single project "Production project") — confirmed same account as
+      the already-stored key by comparing shape (both `bb_live_`-prefixed, both exactly 35
+      characters; only one Browserbase project exists in the org, so there is nothing else
+      it could be), never printing the raw key. Committed
+      `BROWSERBASE_PROJECT_ID=c214bf9e-3b19-4e5d-8aa4-c55472ce4669`, plain text — not
+      sensitive, same as the dashboard shows it. **tool-gateway then verified with a real
+      boot**, direct commands (not through Nx, task C26's fix), real AppConfig
+      (`alterx-tool-gateway`/`local`/`tool-gateway-policy`), real Tavily and Browserbase
+      secrets, real local M2M issuer: `Nest application successfully started`, `curl
+      /health` returned `{"status":"ok","service":"tool-gateway"}` — the exact identity
+      check C23 asked for, not just an HTTP 200. **tool-gateway is closed.**
+
+      **sandbox-service and provisioning-service remain blocked** — both need an AppConfig
+      application that doesn't exist yet (same gap as above, nothing new). **model-gateway
+      remains blocked** — Anthropic and OpenAI keys still don't exist.
+
 **Done when** a 30-case golden set scores above zero for a real reason; a capability
 request for `underwater.basket.weaving` no longer matches a summarisation agent; and the
 Conversation Manager returns different intents for different utterances.
