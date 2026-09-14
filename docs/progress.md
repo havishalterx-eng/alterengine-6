@@ -42,6 +42,9 @@ Format: `YYYY-MM-DD · task · what was demonstrated · who verified`
 - `2026-09-09 · 1.6 · corrected the vendor count: five unpurchased vendors named, not two (Anthropic and OpenAI never named before, Browserbase's project id never named, prior Browserbase var name did not exist in code) · verified directly against each service's environment schema, no code changed`
 - `2026-09-09 · 1.6 · three of five vendor secrets already existed in AWS (Tavily, Browserbase API key, E2B) — wired and proven live (resolves clean, proven to fail on a broken reference, restored) · verified against real AWS, committed db4b53e`
 - `2026-09-10 · 1.6 · found the real Browserbase project id in the account itself (dashboard General settings), confirmed same account as the stored key by length+prefix match without ever printing the raw key, committed it plain text · tool-gateway then built direct (not through Nx) and booted for real under real AppConfig with real Tavily/Browserbase secrets: Nest application successfully started, GET /health returned {"status":"ok","service":"tool-gateway"} · verified live, CLOSING tool-gateway`
+- `2026-09-14 · import · 29 commits of alter-x-4- Phase 2 and Phase 3 work merged into a branch, seven conflicts resolved by hand, CI green on the fourth run (34877005230) · verified against the API, not the watch command`
+- `2026-09-14 · import · duplicate alembic revision 0006 caught before it shipped: git merged both files without reporting a conflict and all four gate scripts passed · reproduced live in a trial merge, then removed`
+- `2026-09-14 · import · auto-created agents would have been invisible to the lookup that created them (embedding written with no model_id, against task 1.3's provenance filter) · found by reading, not by any check; fixed and CI green`
 
 ---
 
@@ -58,7 +61,23 @@ proven live (real AppConfig, real Tavily/Browserbase secrets, real health check)
 blocked, two ways, neither engineering: two missing AppConfig
 applications (sandbox-service, provisioning-service), and the Anthropic/OpenAI keys.
 
-**3.0** (auto-creation idempotency) **closed 2026-09-08** — idempotency key + partial unique index (migration 0006), proven to fail first and verified against real Postgres. 3.3 (tier) now owns the "does tier belong in the key" question.
+**3.0** (auto-creation idempotency) **closed 2026-09-08, superseded 2026-09-14** — our idempotency key and migration are replaced by `alter-x-4-`'s equivalent, which also fixes the tier. The 2026-09-08 verification stands as a record of what was proven; the code it proved is no longer the code that ships.
 
-**Phase 2 (healing loop) unblocked, not started.** Phase 0's 0.1/0.2 decisions are closed;
-nothing else gates it.
+**Phase 2 code imported 2026-09-14, phase NOT closed.** 2.1, 2.2 and 2.3 arrive from
+`alter-x-4-` in PR #9. **2.4 is open and is now the whole of the phase**: nobody has watched
+one deliberately failed run produce a recovery, a memory record and a drift score readable by
+its tenant — not here, and not there. Standing rule 3 applies with full force: this code was
+demonstrated in another repository, by other people, and a demonstration elsewhere is not
+evidence here.
+
+**Phase 3 code imported 2026-09-14.** 3.1, 3.2, 3.3, 3.4, 3.5 and 3.6 all arrive in the same
+PR. Task 3.0 is superseded by their version of the same fix. The phase's done gate — an
+unrelated capability request fails to bind, the cheaper of two equivalent agents wins, a
+repeated unmet requirement stops creating agents — **has not been observed in this
+repository.**
+
+**What CI green does and does not mean here.** It means 136 files of merged work lint,
+typecheck, build and pass their suites together. It does not mean the engine behaves. Three
+real defects surfaced across four runs, every one of them at the seam between the two
+repositories rather than inside either side's work, and one of them would have passed every
+automated check the project owns.

@@ -223,17 +223,27 @@ or the observable behaviour does not change. **Do not let these be picked up sep
 that is how three independent-looking tickets each get closed while the product still
 cannot heal itself.
 
-- [ ] **2.1 credential edge** — from decision 0.1, now answered (design log §30). Additive
+- [x] **2.1 credential edge — **IMPORTED 2026-09-14 (PR #9), not verified here.**** memory-service mints its own
+      service credential on all four outbound clients, and orchestration's
+      `/internal/runs/:id/outcome-summary` accepts an explicit tenant from a service
+      caller (alter-x-4- #144, #146, #147). Original scope: — from decision 0.1, now answered (design log §30). Additive
       tenant parameter on orchestration's `/internal/` routes; Memory stops discarding it.
       Plus: a tenant mismatch **refuses with a named reason** rather than degrading to "not
       found", and every service-asserted tenant is audited. *Unblocked.*
-- [ ] **2.2 replan and recompile** — from decision 0.2, now answered. Send `TaskSkeleton`.
+- [x] **2.2 replan and recompile — **IMPORTED 2026-09-14 (PR #9), not verified here.**** The task skeleton is persisted
+      on the workflow version and replan runs from it, reviving the two dead strategies
+      (alter-x-4- #145, #156). Original scope: — from decision 0.2, now answered. Send `TaskSkeleton`.
       Revives two of eight dead strategies. `repair` decides correctly then defers — finish
       it in the same pass; it is an omission, not a boundary.
-- [ ] **2.3 drift readback** — small, real. `drift_read` admits only model and provider
+- [x] **2.3 drift readback — **IMPORTED 2026-09-14 (PR #9), not verified here.**** `drift_read` admits the agent subject,
+      with its own migration (alter-x-4- #142). Original scope: — small, real. `drift_read` admits only model and provider
       subjects, so agent drift scores compute, persist, and return zero rows to their own
       tenant. Add the agent subject.
-- [ ] **2.4 prove the cycle** — acceptance. Force a run to fail. Watch it reach Recovery,
+- [ ] **2.4 prove the cycle — STILL OPEN, and it is now the whole of Phase 2.** Real
+      failing nodes were run against Recovery on alter-x-4- and reclassified correctly
+      (#150, #151, #166), but **nobody has watched the full circuit** — recovery, memory
+      write-back, and a drift score that changes the next selection — and nobody has watched
+      any of it in this repository. Original scope: — acceptance. Force a run to fail. Watch it reach Recovery,
       replan, summarise into Memory, and move a Drift score that changes the next selection.
       Anything less than the full circuit is not this phase finished.
 
@@ -248,14 +258,23 @@ score readable by the tenant that owns it — demonstrated live, not in unit tes
 be judged fixed until a real provider exists, because the mock cannot tell a correct
 binding from an incorrect one.
 
-- [ ] **3.1 capability filter** — needs Phase 1. Selection & Binding applies **no exact-
+- [x] **3.1 capability filter — **IMPORTED 2026-09-14 (PR #9), not verified here.**** An agent must declare the capability
+      it is bound for; containment decides eligibility (alter-x-4- #160, #162). The two score
+      floors are removed on their measurement — see memoryalter 2026-09-14. Original scope: — needs Phase 1. Selection & Binding applies **no exact-
       capability filter at all**. Add it, then re-tune the similarity threshold against real
       embeddings.
-- [ ] **3.2 binding ranking** — needs Phase 1. A 30–40× latency and cost swap does not move
+- [x] **3.2 binding ranking — **IMPORTED 2026-09-14 (PR #9), not verified here.**** Measured latency and token cost move
+      the ranking, with `efficiency_weight` read from the tenant's routing policy
+      (alter-x-4- #161, #167). Original scope: — needs Phase 1. A 30–40× latency and cost swap does not move
       the winner; `agent_id ASC` decides it. The correctly-scoring `/bind-architecture`
       exists but has never run in the execution path — **treat as a migration with a
       fallback, not a swap.**
-- [x] **3.0 [+] auto-creation idempotency. CLOSED 2026-09-08.** Auto-creation is now
+- [x] **3.0 [+] auto-creation idempotency. CLOSED 2026-09-08, SUPERSEDED 2026-09-14.**
+      Replaced wholesale by alter-x-4-'s version, which carries the same idempotency design
+      and also fixes the tier (task 3.3). Our migration `0006_agent_auto_creation_idempotency.py`
+      is deleted; theirs, `0006_agent_auto_creation_key.py`, is the one that ships. Both
+      declared revision `0006` and git merged them without a conflict — see memoryalter.
+      Original record: Auto-creation is now
       idempotent per tenant + workspace + capability set. `agents` gains an
       `idempotency_key` (SHA-256 of the *sorted* capability set) and a partial unique
       index over `(tenant_id, workspace_id, idempotency_key) WHERE idempotency_key IS
@@ -268,7 +287,12 @@ binding from an incorrect one.
       capabilities hit the same key, and a different capability set still creates its own
       agent. Key scope is capabilities only — tier (hardcoded STANDARD today) is owned by
       3.3.
-- [ ] **3.3 auto-creation tier** — from decision 0.3 (design log §31). Never create an agent
+- [x] **3.3 auto-creation tier — **IMPORTED 2026-09-14 (PR #9), not verified here.**** Creation happens at the requested
+      tier under a configured ceiling; above it the bind fails with
+      `no_agent_at_required_tier` (alter-x-4- #157). **Ceiling default changed on import from
+      `ADVANCED` to `STANDARD` per design log 31.** The trap this inherited from 3.0 is moot:
+      their key is also capability-only, and creation only happens when no agent has the
+      capability at all. Original scope: — from decision 0.3 (design log §31). Never create an agent
       that cannot satisfy the requirement that triggered it: above the configured ceiling,
       **fail the bind with a named reason**. Ceiling is config, default `STANDARD`.
       **Inherits a trap from 3.0:** the idempotency key hashes the capability set only, so
@@ -276,12 +300,16 @@ binding from an incorrect one.
       `STANDARD` agent hits the same key and **silently returns the STANDARD agent** — no
       error, a usable binding to the wrong tier. Decide explicitly whether tier belongs in
       the key, and migrate the partial unique index with it if so.
-- [ ] **3.4 capability resolver** — independent. Advanced-tier terms are tested before
+- [x] **3.4 capability resolver — **IMPORTED 2026-09-14 (PR #9), not verified here.**** The word naming the task decides
+      the tier (alter-x-4- #153). Original scope: — independent. Advanced-tier terms are tested before
       fast-tier ones in a plain if/elif, so an incidental adjective decides the tier.
       Replace set membership with something that reads the request.
-- [ ] **3.5 tool gateway** — independent. Define the protocol enum first; then the count of
+- [x] **3.5 tool gateway — **IMPORTED 2026-09-14 (PR #9), not verified here.**** The canonical tool set is pinned and what
+      is missing is counted, so the denominator is a fact (alter-x-4- #154). Original scope: — independent. Define the protocol enum first; then the count of
       what is missing becomes a fact instead of an estimate.
-- [ ] **3.6 requirements map** — from decision 0.4. Do it here, while the architecture path
+- [x] **3.6 requirements map — CLOSED 2026-09-14 BY DELETION, not by filling.**
+      alter-x-4- #152 drops the write-only columns. Design log 32 named deletion as one of its
+      two clean resolutions, so this closes C14 as well. Original scope: — from decision 0.4. Do it here, while the architecture path
       is still fresh in someone's head.
 
 **Done when** an unrelated capability request fails to bind instead of matching; the
@@ -548,7 +576,8 @@ demo.
       means it is the rule, not the exception. Decide whether scoped overrides become the
       documented pattern for every service, or the values are unified. **Found by task 1.0
       running the stack, not by reading it.**
-- [ ] **C14 node_requirements single source of truth** — from decision 0.4's recorded
+- [x] **C14 node_requirements single source of truth. CLOSED 2026-09-14** by task 3.6's
+      deletion of the columns. Original scope: — from decision 0.4's recorded
       residual. A stored map plus fresh run-time resolution is §7 pattern 4. Either run-time
       consumers read the column, or it is deleted. Touches the frozen Executor, so **after
       revival**, not during.
