@@ -11,23 +11,13 @@ import {
 
 const TENANT_ID = "ten_018f4d6e-2b4a-7a3e-8c1a-1234567890ab";
 const WORKFLOW_ID = "wf_018f4d6e-2b4a-7a3e-8c1a-1234567890ab";
-const capabilityService = {
-  async resolveNodeRequirements(request: { readonly node_type: string }) {
-    return {
-      node_requirements_json: JSON.stringify({
-        capabilities: request.node_type === "LLMTask" ? ["text.generation"] : [],
-      }),
-      schema_version: "1",
-    };
-  },
-};
-
 interface WorkflowVersionRow {
   id: string;
   tenant_id: string;
   workflow_id: string;
   version: number;
   compiled_dag: string;
+  task_skeleton: string;
   status: string;
 }
 
@@ -67,14 +57,26 @@ function createFakeStore(options: { failNextInsertWithCode?: string } = {}): {
               failNextInsertWithCode = undefined;
               throw Object.assign(new Error("simulated db error"), { code });
             }
-            const [id, tenantId, workflowId, version, compiledDag, , , , ] =
-              values as [string, string, string, number, string, string, string, string, string];
+            const [id, tenantId, workflowId, version, compiledDag, taskSkeleton] =
+              values as [
+                string,
+                string,
+                string,
+                number,
+                string,
+                string,
+                string,
+                string,
+                string,
+                string,
+              ];
             rows.push({
               id,
               tenant_id: tenantId,
               workflow_id: workflowId,
               version,
               compiled_dag: compiledDag,
+              task_skeleton: taskSkeleton,
               status: "compiled",
             });
             return { rowCount: 1, rows: [] };
@@ -115,7 +117,7 @@ function compileRequest(
 describe("GraphCompilerService.compileWorkflow", () => {
   it("persists a workflow_versions row with a bare-UUID tenant_id", async () => {
     const { store, rows } = createFakeStore();
-    const service = new GraphCompilerService(store, capabilityService);
+    const service = new GraphCompilerService(store);
 
     await service.compileWorkflow(compileRequest());
 
@@ -125,9 +127,23 @@ describe("GraphCompilerService.compileWorkflow", () => {
     expect(rows[0]!.version).toBe(1);
   });
 
+  it("persists the task skeleton the version was compiled from", async () => {
+    // Recovery replans from this. Only a SHA-256 of it used to be kept, which
+    // is one-way, so `replan` sent the compiled DAG instead -- a shape the
+    // planner rejects -- and the strategy could never succeed.
+    const { store, rows } = createFakeStore();
+    const service = new GraphCompilerService(store);
+
+    await service.compileWorkflow(compileRequest());
+
+    expect(JSON.parse(rows[0]!.task_skeleton)).toEqual(
+      JSON.parse(skeletonJson()),
+    );
+  });
+
   it("returns a wfv_ prefixed workflow_version_id", async () => {
     const { store } = createFakeStore();
-    const service = new GraphCompilerService(store, capabilityService);
+    const service = new GraphCompilerService(store);
 
     const response = await service.compileWorkflow(compileRequest());
 
@@ -138,7 +154,7 @@ describe("GraphCompilerService.compileWorkflow", () => {
 
   it("returns compiled_dag_json that round-trips as a valid CompiledDag", async () => {
     const { store } = createFakeStore();
-    const service = new GraphCompilerService(store, capabilityService);
+    const service = new GraphCompilerService(store);
 
     const response = await service.compileWorkflow(compileRequest());
     const dag = JSON.parse(response.compiled_dag_json);
@@ -149,7 +165,7 @@ describe("GraphCompilerService.compileWorkflow", () => {
 
   it("increments version on a second compile of the same workflow", async () => {
     const { store, rows } = createFakeStore();
-    const service = new GraphCompilerService(store, capabilityService);
+    const service = new GraphCompilerService(store);
 
     await service.compileWorkflow(compileRequest());
     await service.compileWorkflow(compileRequest());
@@ -159,7 +175,7 @@ describe("GraphCompilerService.compileWorkflow", () => {
 
   it("rejects a malformed tenant_id", async () => {
     const { store } = createFakeStore();
-    const service = new GraphCompilerService(store, capabilityService);
+    const service = new GraphCompilerService(store);
 
     await expect(
       service.compileWorkflow(compileRequest({ tenant_id: "not-a-tenant" })),
@@ -168,7 +184,7 @@ describe("GraphCompilerService.compileWorkflow", () => {
 
   it("rejects a malformed workflow_id", async () => {
     const { store } = createFakeStore();
-    const service = new GraphCompilerService(store, capabilityService);
+    const service = new GraphCompilerService(store);
 
     await expect(
       service.compileWorkflow(compileRequest({ workflow_id: "not-a-workflow" })),
@@ -177,7 +193,7 @@ describe("GraphCompilerService.compileWorkflow", () => {
 
   it("rejects blank task_skeleton_json", async () => {
     const { store } = createFakeStore();
-    const service = new GraphCompilerService(store, capabilityService);
+    const service = new GraphCompilerService(store);
 
     await expect(
       service.compileWorkflow(compileRequest({ task_skeleton_json: "   " })),
@@ -186,7 +202,7 @@ describe("GraphCompilerService.compileWorkflow", () => {
 
   it("maps a unique-violation insert into CompilerConcurrencyError", async () => {
     const { store } = createFakeStore({ failNextInsertWithCode: "23505" });
-    const service = new GraphCompilerService(store, capabilityService);
+    const service = new GraphCompilerService(store);
 
     await expect(service.compileWorkflow(compileRequest())).rejects.toThrow(
       CompilerConcurrencyError,
@@ -195,32 +211,42 @@ describe("GraphCompilerService.compileWorkflow", () => {
 
   it("maps a foreign-key-violation insert into CompilerValidationError", async () => {
     const { store } = createFakeStore({ failNextInsertWithCode: "23503" });
-    const service = new GraphCompilerService(store, capabilityService);
+    const service = new GraphCompilerService(store);
 
     await expect(service.compileWorkflow(compileRequest())).rejects.toThrow(
       CompilerValidationError,
     );
   });
 
-  it("returns resolved node_requirements_json and empty policy_bindings_json", async () => {
+  // Both fields are retired (0037): deprecated on the wire, never populated.
+  // Asserted rather than deleted so a future change that starts filling them
+  // again has to come through this test.
+  it("returns the retired requirement fields empty", async () => {
     const { store } = createFakeStore();
-    const service = new GraphCompilerService(store, capabilityService);
+    const service = new GraphCompilerService(store);
 
     const response = await service.compileWorkflow(compileRequest());
 
-    expect(JSON.parse(response.node_requirements_json)).toEqual({
-      node_a: { capabilities: ["text.generation"] },
-      node_b: { capabilities: [] },
-      verify_step_0: { capabilities: [] },
-    });
+    expect(JSON.parse(response.node_requirements_json)).toEqual({});
     expect(JSON.parse(response.policy_bindings_json)).toEqual({});
+  });
+
+  it("compiles without a Capability Resolver at all", async () => {
+    // The compile path used to make one resolver round trip per node. Nothing
+    // reads what that produced any more, so the dependency is gone -- this
+    // fails to typecheck, not merely to run, if it comes back.
+    const { store } = createFakeStore();
+
+    await expect(
+      new GraphCompilerService(store).compileWorkflow(compileRequest()),
+    ).resolves.toMatchObject({ compiled_dag_json: expect.any(String) });
   });
 });
 
 describe("GraphCompilerService.validateWorkflowDag", () => {
   it("reports valid=true for a well-formed CompiledDag", async () => {
     const { store } = createFakeStore();
-    const service = new GraphCompilerService(store, capabilityService);
+    const service = new GraphCompilerService(store);
     const compileResponse = await service.compileWorkflow(compileRequest());
 
     const result = await service.validateWorkflowDag({
@@ -234,7 +260,7 @@ describe("GraphCompilerService.validateWorkflowDag", () => {
 
   it("reports valid=false with issues for malformed JSON", async () => {
     const { store } = createFakeStore();
-    const service = new GraphCompilerService(store, capabilityService);
+    const service = new GraphCompilerService(store);
 
     const result = await service.validateWorkflowDag({
       tenant_id: TENANT_ID,
@@ -248,7 +274,7 @@ describe("GraphCompilerService.validateWorkflowDag", () => {
 
   it("reports valid=false with schema issues for a structurally wrong DAG", async () => {
     const { store } = createFakeStore();
-    const service = new GraphCompilerService(store, capabilityService);
+    const service = new GraphCompilerService(store);
 
     const result = await service.validateWorkflowDag({
       tenant_id: TENANT_ID,

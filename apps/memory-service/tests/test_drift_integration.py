@@ -4,8 +4,10 @@ import asyncio
 import hashlib
 import json
 import os
+import signal
 import socket
 import subprocess
+import sys
 import time
 from collections.abc import Generator, Sequence
 from datetime import UTC, datetime, timedelta
@@ -55,13 +57,27 @@ TENANT_PASSWORD = "know15-tenant-test-only"
 DRIFT_READER_PASSWORD = "drift-reader-test-only"
 
 
+
+class _StubTokenProvider:
+    """Stands in for Auth0 without reaching it.
+
+    memory-service now mints its own credential for every outbound call, so
+    these clients need a provider rather than a caller's header. The route
+    under test accepts any non-empty bearer, so a fixed token exercises the
+    same path a real minted one would.
+    """
+
+    def metadata(self) -> tuple[tuple[str, str], ...]:
+        return (("authorization", "Bearer integration-token"),)
+
+
 class _UnexercisedOutcomeClient:
     """This test file covers agent drift only -- model/provider drift has
     its own dedicated coverage. Satisfies CostLedgerOutcomeClient's real
     Protocol shape without a real cost-ledger-service running."""
 
     async def load_outcome_window(
-        self, *, provider: str, resource: str | None, limit: int, authorization: str
+        self, *, provider: str, resource: str | None, limit: int
     ) -> ModelOutcomeWindow:
         raise AssertionError("not exercised by this test")
 
@@ -89,9 +105,9 @@ class _FakeOutcomeClient:
         self._windows = windows
 
     async def load_outcome_window(
-        self, *, provider: str, resource: str | None, limit: int, authorization: str
+        self, *, provider: str, resource: str | None, limit: int
     ) -> ModelOutcomeWindow:
-        del limit, authorization
+        del limit
         return self._windows.get((provider, resource), ModelOutcomeWindow(observations=()))
 
 
@@ -99,6 +115,37 @@ def _free_port() -> int:
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         return int(listener.getsockname()[1])
+
+
+def _stop_process_tree(process: subprocess.Popen[str]) -> str:
+    """Stop a spawned service and everything it started, then return its output.
+
+    `uv run uvicorn` is not one process. On Windows it is uv, then the venv's
+    launcher, then the real interpreter that holds the sockets, and
+    `Popen.terminate()` reaches only the first: the interpreter outlived every
+    test run, kept its ports, and made the next run fail to bind (#148).
+    taskkill /T walks the tree from the root. On POSIX the service is started
+    in its own session, so the whole group can be signalled at once.
+    """
+    # sys.platform rather than os.name: it is what type checkers narrow on, so
+    # killpg and SIGKILL are checked only where they exist.
+    if sys.platform == "win32":
+        if process.poll() is None:
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                capture_output=True,
+                check=False,
+            )
+        output, _ = process.communicate(timeout=10)
+        return output or ""
+    if process.poll() is None:
+        os.killpg(process.pid, signal.SIGTERM)
+    try:
+        output, _ = process.communicate(timeout=10)
+    except subprocess.TimeoutExpired:
+        os.killpg(process.pid, signal.SIGKILL)
+        output, _ = process.communicate(timeout=10)
+    return output or ""
 
 
 def _migrate(service_root: Path, url: str) -> None:
@@ -260,6 +307,11 @@ def drift_stack() -> Generator[dict[str, str], None, None]:
         environment["INTERNAL_SERVICE_TOKEN_SHA256"] = hashlib.sha256(
             b"integration-token"
         ).hexdigest()
+        # intelligence-service also serves the Capability Resolver over gRPC,
+        # on 0.0.0.0:50061 unless told otherwise. The HTTP port was already
+        # ephemeral; the gRPC one was not, so a single surviving process -- or
+        # two fixtures alive at once -- failed every later bind (#148).
+        environment["CAPABILITY_GRPC_BIND_ADDRESS"] = f"127.0.0.1:{_free_port()}"
         process = subprocess.Popen(
             [
                 "uv",
@@ -277,6 +329,8 @@ def drift_stack() -> Generator[dict[str, str], None, None]:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            # Its own process group on POSIX, so teardown can signal the tree.
+            start_new_session=sys.platform != "win32",
         )
         base_url = f"http://127.0.0.1:{port}"
         deadline = time.monotonic() + 15
@@ -290,8 +344,7 @@ def drift_stack() -> Generator[dict[str, str], None, None]:
             except httpx.HTTPError:
                 time.sleep(0.1)
         else:
-            process.terminate()
-            output, _ = process.communicate(timeout=5)
+            output = _stop_process_tree(process)
             raise RuntimeError(f"intelligence-service failed to become healthy: {output}")
 
         try:
@@ -306,12 +359,7 @@ def drift_stack() -> Generator[dict[str, str], None, None]:
                 ),
             }
         finally:
-            process.terminate()
-            try:
-                process.communicate(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.communicate(timeout=5)
+            _stop_process_tree(process)
 
 
 def test_real_performance_http_projection_computes_and_persists_drift(
@@ -375,7 +423,9 @@ def test_real_performance_http_projection_computes_and_persists_drift(
 
     async def compute() -> tuple[ComputeAgentDriftResponse, ComputeAgentDriftResponse]:
         client = HttpxIntelligencePerformanceClient(
-            drift_stack["intelligence_base_url"], timeout_seconds=5
+            drift_stack["intelligence_base_url"],
+            timeout_seconds=5,
+            access_token_provider=_StubTokenProvider(),
         )
         detector = DriftDetector(
             client,
@@ -422,7 +472,9 @@ def test_real_performance_http_projection_computes_and_persists_drift(
 
     async def list_scores(tenant_id: str) -> tuple[str, ...]:
         client = HttpxIntelligencePerformanceClient(
-            drift_stack["intelligence_base_url"], timeout_seconds=5
+            drift_stack["intelligence_base_url"],
+            timeout_seconds=5,
+            access_token_provider=_StubTokenProvider(),
         )
         detector = DriftDetector(
             client,
@@ -444,8 +496,15 @@ def test_real_performance_http_projection_computes_and_persists_drift(
     cross_tenant_scores = asyncio.run(list_scores(OTHER_TENANT_ID))
     same_tenant_scores = asyncio.run(list_scores(TENANT_ID))
     tenant_engine.dispose()
+    # Another tenant sees nothing, and the owner sees its own score. Both come
+    # from drift_read alone, not from an app-level ownership check.
+    #
+    # `same_tenant_scores` asserted `()` until 0006, which was accurate and
+    # was the defect: the policy admitted only model and provider rows, so a
+    # tenant reading back the agent drift written for it got an empty list --
+    # indistinguishable from "this agent has never drifted".
     assert cross_tenant_scores == ()
-    assert same_tenant_scores == ()
+    assert len(same_tenant_scores) == 1
 
     admin = sa.create_engine(drift_stack["policy_admin_url"])
     with admin.connect() as connection:
@@ -512,7 +571,9 @@ def test_model_and_provider_drift_computes_and_persists_real_rows(
 
     async def run() -> tuple[str, str, str, tuple[str, ...], tuple[str, ...]]:
         client = HttpxIntelligencePerformanceClient(
-            drift_stack["intelligence_base_url"], timeout_seconds=5
+            drift_stack["intelligence_base_url"],
+            timeout_seconds=5,
+            access_token_provider=_StubTokenProvider(),
         )
         detector = DriftDetector(
             client,
@@ -574,7 +635,9 @@ def test_model_and_provider_drift_computes_and_persists_real_rows(
         asyncio.run(
             DriftDetector(
                 HttpxIntelligencePerformanceClient(
-                    drift_stack["intelligence_base_url"], timeout_seconds=5
+                    drift_stack["intelligence_base_url"],
+                    timeout_seconds=5,
+                    access_token_provider=_StubTokenProvider(),
                 ),
                 repository,
                 policy_store,

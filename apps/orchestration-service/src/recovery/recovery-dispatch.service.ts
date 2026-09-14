@@ -2,6 +2,7 @@ import type { ModelGatewayHandler } from "@alterx/adapters";
 import type {
   CompiledDag,
   CompilerCompileWorkflowRequest,
+  ModelInvocationPayload,
   RootCauseEstimate,
 } from "@alterx/contracts";
 import { CompiledDagSchema } from "@alterx/contracts";
@@ -47,6 +48,20 @@ export interface RecoveryRunReader {
     runId: string,
   ): Promise<{
     readonly compiledDagJson: string;
+    /**
+     * The TaskSkeleton this version was compiled from, or null.
+     *
+     * Replan needs this and not `compiledDagJson`: the planner parses what it
+     * is sent as a TaskSkeleton, and a compiled DAG is a different shape, so
+     * sending one fails every time. That is what `replan` did until this
+     * field existed, encouraged by the planner's own request field being
+     * named `current_dag_json` when it has never accepted a DAG.
+     *
+     * Null for two real cases: a version compiled before 0036, whose skeleton
+     * was only ever kept as a one-way hash, and an architecture-compiled
+     * version, which was never built from a skeleton at all.
+     */
+    readonly taskSkeletonJson: string | null;
     readonly dagSchemaVersion: string;
     readonly workflowId: string;
     readonly workspaceId: string;
@@ -272,11 +287,24 @@ export class RecoveryDispatchService {
         run_id: context.runId,
         node_execution_id: context.nodeExecutionId,
         model_alias: "ADVANCED",
+        // The gateway hands input_json straight to a provider, which parses
+        // it with ModelInvocationPayloadSchema -- strict, and `messages` is
+        // required. This used to send the task object bare, so every
+        // provider rejected it before a model saw it and escalation could
+        // only ever report "failed". Same wrapping as
+        // RecoveryPolicyService's own root-cause call.
         input_json: JSON.stringify({
-          task: "Re-attempt this node's output at a higher model tier after a logic/output failure.",
-          failure_class: context.failureClass,
-          root_cause: context.estimate,
-        }),
+          messages: [
+            {
+              role: "user",
+              content: JSON.stringify({
+                task: "Re-attempt this node's output at a higher model tier after a logic/output failure.",
+                failure_class: context.failureClass,
+                root_cause: context.estimate,
+              }),
+            },
+          ],
+        } satisfies ModelInvocationPayload),
       });
       return {
         outcome: "resolved",
@@ -370,12 +398,29 @@ export class RecoveryDispatchService {
 
   async #replan(context: DispatchContext): Promise<DispatchResult> {
     try {
-      const { compiledDagJson, dagSchemaVersion, workflowId } =
+      const { taskSkeletonJson, dagSchemaVersion, workflowId } =
         await this.runs.loadCompiledDagJson(context.tenantId, context.runId);
+      if (taskSkeletonJson === null) {
+        // Two real cases reach here: a version compiled before the
+        // task_skeleton column existed, whose skeleton survives only as a
+        // one-way hash, and an architecture-compiled version, which was never
+        // built from a skeleton at all. Neither can be replanned, and neither
+        // is a failure of this run -- the same honest decline `swap_agent`
+        // already uses when its target is not configured.
+        return {
+          outcome: "escalated",
+          detail:
+            "strategy_dispatch_deferred: this workflow version has no task skeleton to replan from " +
+            "(compiled before it was persisted, or compiled from an architecture)",
+        };
+      }
       const replanned = await this.planner.replan({
         tenant_id: `ten_${context.tenantId}`,
         run_id: context.runId,
-        current_dag_json: compiledDagJson,
+        // The planner parses this as a TaskSkeleton despite the field being
+        // named current_dag_json, which is why sending compiledDagJson here
+        // failed every time.
+        current_dag_json: taskSkeletonJson,
         failure_context_json: JSON.stringify({
           node_execution_id: context.nodeExecutionId,
           failure_class: context.failureClass,

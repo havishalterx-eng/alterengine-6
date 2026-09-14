@@ -1,3 +1,4 @@
+import { ModelGatewayInvalidResponseError } from "@alterx/shared-clients";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -12,7 +13,7 @@ import type { GeneratedFileMaterializer } from "./generated-file-materializer";
 import { NodeExecutionLedgerService } from "../runs/node-execution-ledger.service";
 import { RunStreamEventService } from "../runs/run-stream-event.service";
 import type { RecoveryTriggerService } from "../recovery/recovery-trigger.service";
-import { VerifyGateService } from "./verify-gate.service";
+import { VerifyGateError, VerifyGateService } from "./verify-gate.service";
 
 const TENANT_ID = "ten_018f4d6e-2b4a-7a3e-8c1a-1234567890ab";
 const RUN_ID = "run_018f4d6e-2b4a-7a3e-8c1a-1234567890ab";
@@ -602,7 +603,12 @@ describe("NodeexecService.executeNode", () => {
     const handler: NodeHandler = {
       nodeType: "LLMTask",
       async execute() {
-        throw new NodeHandlerValidationError("model gateway rejected the request");
+        // MODEL_OUTPUT_INVALID: the model's own answer failed validation, so
+        // the failure is the agent's and belongs on its record. This used to
+        // throw NodeHandlerValidationError, which is a verdict on the node's
+        // config rather than on the agent -- no longer recorded (#164), and
+        // asserted as such two tests below.
+        throw new ModelGatewayInvalidResponseError("answered in prose, not JSON");
       },
     };
     const runWorkspaceLookup = { getWorkspaceId: vi.fn().mockResolvedValue("018f4d6e-2b4a-7a3e-8c1a-abcdefabcdef") };
@@ -630,7 +636,95 @@ describe("NodeexecService.executeNode", () => {
       tenant_id: TENANT_ID, run_id: RUN_ID, node_execution_id: NODE_EXECUTION_ID,
       node_key: "node_task", node_type: "LLMTask",
       config_json: JSON.stringify({ prompt: "Do it", model_alias: "STANDARD" }), inputs_json: "{}",
-    })).rejects.toThrow(NodeHandlerValidationError);
+    })).rejects.toThrow(ModelGatewayInvalidResponseError);
+
+    expect(performanceRecorder.recordObservation).toHaveBeenCalledWith(
+      "agt_018f4d6e-2b4a-7a3e-8c1a-1234567890ab",
+      expect.objectContaining({ verdict: "failure" }),
+    );
+  });
+
+  it.each([
+    ["VERIFY_SERVICE_UNAVAILABLE", new VerifyGateError("VERIFY_SERVICE_UNAVAILABLE", "upstream")],
+    ["NODE_HANDLER_VALIDATION_FAILED", new NodeHandlerValidationError("no model_alias in config")],
+    ["a bare transport failure", Object.assign(new Error("socket closed"), { code: 14 })],
+  ])("does not blame the bound agent for %s", async (_label, thrown) => {
+    // A performance record asserts that this agent did badly, and Selection &
+    // Binding routes away from an agent that has one. None of these say
+    // anything about the agent: an outage, a node config that never named a
+    // model, a dropped socket. Recording them punished whichever agent
+    // happened to be bound while the platform had a bad minute (#164).
+    const handler: NodeHandler = {
+      nodeType: "LLMTask",
+      async execute() {
+        throw thrown;
+      },
+    };
+    const runWorkspaceLookup = { getWorkspaceId: vi.fn().mockResolvedValue("018f4d6e-2b4a-7a3e-8c1a-abcdefabcdef") };
+    const capabilityResolver = {
+      resolveNodeRequirements: vi.fn().mockResolvedValue({ node_requirements_json: "{}", schema_version: "1" }),
+    };
+    const selectionBinding = {
+      bindAgentModelTool: vi.fn().mockResolvedValue({
+        matched: true,
+        agent_id: "agt_018f4d6e-2b4a-7a3e-8c1a-1234567890ab",
+        agent_version: 1,
+        model_alias: "ADVANCED",
+        tool_names: [],
+      }),
+    };
+    const performanceRecorder = { recordObservation: vi.fn().mockResolvedValue(undefined) };
+    const nodeexec = new NodeexecService(
+      new NodeHandlerRegistry([handler]), fakeLedger(), undefined, undefined, undefined,
+      undefined, undefined, undefined,
+      runWorkspaceLookup as never, capabilityResolver as never, selectionBinding as never,
+      performanceRecorder as never,
+    );
+
+    await expect(nodeexec.executeNode({
+      tenant_id: TENANT_ID, run_id: RUN_ID, node_execution_id: NODE_EXECUTION_ID,
+      node_key: "node_task", node_type: "LLMTask",
+      config_json: JSON.stringify({ prompt: "Do it", model_alias: "STANDARD" }), inputs_json: "{}",
+    })).rejects.toThrow();
+
+    expect(performanceRecorder.recordObservation).not.toHaveBeenCalled();
+  });
+
+  it("blames the bound agent when Verify Gate rejects its output", async () => {
+    // The other half of the same rule: VERIFICATION_GATE_FAILED is a verdict
+    // on the output, which is the agent's, unlike the service being down.
+    const handler: NodeHandler = {
+      nodeType: "LLMTask",
+      async execute() {
+        throw new VerifyGateError("VERIFICATION_GATE_FAILED", "Verify Gate rejected node output");
+      },
+    };
+    const runWorkspaceLookup = { getWorkspaceId: vi.fn().mockResolvedValue("018f4d6e-2b4a-7a3e-8c1a-abcdefabcdef") };
+    const capabilityResolver = {
+      resolveNodeRequirements: vi.fn().mockResolvedValue({ node_requirements_json: "{}", schema_version: "1" }),
+    };
+    const selectionBinding = {
+      bindAgentModelTool: vi.fn().mockResolvedValue({
+        matched: true,
+        agent_id: "agt_018f4d6e-2b4a-7a3e-8c1a-1234567890ab",
+        agent_version: 1,
+        model_alias: "ADVANCED",
+        tool_names: [],
+      }),
+    };
+    const performanceRecorder = { recordObservation: vi.fn().mockResolvedValue(undefined) };
+    const nodeexec = new NodeexecService(
+      new NodeHandlerRegistry([handler]), fakeLedger(), undefined, undefined, undefined,
+      undefined, undefined, undefined,
+      runWorkspaceLookup as never, capabilityResolver as never, selectionBinding as never,
+      performanceRecorder as never,
+    );
+
+    await expect(nodeexec.executeNode({
+      tenant_id: TENANT_ID, run_id: RUN_ID, node_execution_id: NODE_EXECUTION_ID,
+      node_key: "node_task", node_type: "LLMTask",
+      config_json: JSON.stringify({ prompt: "Do it", model_alias: "STANDARD" }), inputs_json: "{}",
+    })).rejects.toThrow(VerifyGateError);
 
     expect(performanceRecorder.recordObservation).toHaveBeenCalledWith(
       "agt_018f4d6e-2b4a-7a3e-8c1a-1234567890ab",
@@ -994,5 +1088,89 @@ describe("NodeexecService.finalizeRun", () => {
     });
 
     expect(response.status).toBe("completed");
+  });
+});
+
+describe("NodeexecService failure cause (#149)", () => {
+  /** A handler that always throws whatever it is given. */
+  function throwingHandler(error: unknown): NodeHandler {
+    return {
+      nodeType: "Merge",
+      execute: () => {
+        throw error;
+      },
+    } as unknown as NodeHandler;
+  }
+
+  async function failWith(error: unknown): Promise<{ code: string; detail: string }> {
+    const ledger = fakeLedger();
+    const nodeexec = new NodeexecService(
+      new NodeHandlerRegistry([throwingHandler(error)]),
+      ledger,
+    );
+    await expect(
+      nodeexec.executeNode({
+        tenant_id: TENANT_ID, run_id: RUN_ID, node_execution_id: NODE_EXECUTION_ID,
+        node_key: "node_merge", node_type: "Merge", config_json: "{}", inputs_json: "{}",
+      }),
+    ).rejects.toBeDefined();
+    return vi.mocked(ledger.recordFailed).mock.calls[0]![1] as {
+      code: string;
+      detail: string;
+    };
+  }
+
+  it("keeps the message of an error that carries no code", async () => {
+    // This is the whole defect: the message used to be replaced by the
+    // constant "Node execution failed", which matches none of the
+    // classifier's patterns, so the failure classified as `unknown`.
+    const failure = await failWith(new Error("model gateway returned no content"));
+
+    expect(failure.code).toBe("NODE_EXECUTION_FAILED");
+    expect(failure.detail).toBe("model gateway returned no content");
+  });
+
+  it("uses a string code as the error code", async () => {
+    const failure = await failWith(
+      Object.assign(new Error("credential is missing"), { code: "CREDENTIAL_MISSING" }),
+    );
+
+    expect(failure.code).toBe("CREDENTIAL_MISSING");
+    expect(failure.detail).toBe("credential is missing");
+  });
+
+  it("names a gRPC status number so the classifier can read it", async () => {
+    // 14 is UNAVAILABLE. As a bare number it matched no pattern; named, the
+    // classifier scores it as an infrastructure_failure, which is the one
+    // thing a transport error should be.
+    const failure = await failWith(
+      Object.assign(new Error("no connection established"), { code: 14 }),
+    );
+
+    expect(failure.code).toBe("UNAVAILABLE");
+  });
+
+  it("falls back to the error name when the message is empty", async () => {
+    // `name`, not `constructor.name`: a subclass that does not assign
+    // `this.name` inherits "Error", but every error class in this codebase
+    // assigns it, and `constructor.name` would not survive a minified bundle.
+    class SandboxSessionLost extends Error {
+      constructor(message: string) {
+        super(message);
+        this.name = "SandboxSessionLost";
+      }
+    }
+    const failure = await failWith(new SandboxSessionLost(""));
+
+    expect(failure.detail).toBe("SandboxSessionLost");
+  });
+
+  it("still reports a non-Error throw without inventing a cause", async () => {
+    const failure = await failWith("a bare string");
+
+    expect(failure).toEqual({
+      code: "NODE_EXECUTION_FAILED",
+      detail: "Node execution failed",
+    });
   });
 });

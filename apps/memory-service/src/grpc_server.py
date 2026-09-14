@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from alter.memory.v1 import memory_pb2_grpc
 from src.config import get_settings
+from src.m2m_auth import lazy_auth0_m2m_token_provider_from_settings
 from src.memory_grpc_service import MemoryGrpcService
 from src.memory_learning.extraction import MemoryLearningKernel
 from src.memory_learning.orchestration_client import HttpxOrchestrationRunClient
@@ -29,10 +30,12 @@ async def serve() -> None:
     orchestration = HttpxOrchestrationRunClient(
         str(settings.orchestration_service_base_url),
         settings.orchestration_service_timeout_seconds,
+        access_token_provider=lazy_auth0_m2m_token_provider_from_settings(settings),
     )
     ads_core = HttpxAdsCoreMemoryClient(
         str(settings.ads_core_base_url),
         settings.ads_core_timeout_seconds,
+        access_token_provider=lazy_auth0_m2m_token_provider_from_settings(settings),
     )
     service = MemoryGrpcService(
         MemoryLearningKernel(

@@ -253,6 +253,7 @@ export class NodeexecService {
         }), request);
         await this.#recordPerformanceBestEffort(
           request, boundAgentId, "failure", executionStartedAtMs, executedMetadata,
+          problem.data.error_code,
         );
       } else {
         const verification = await this.verifyGate?.scoreNodeInline({
@@ -323,11 +324,15 @@ export class NodeexecService {
         },
         failure,
       );
+      // The same failure the ledger and Recovery see. This used to restate the
+      // constant independently, so even once the ledger carried a real cause
+      // the event stream would still have said "Node execution failed".
       await this.#appendBestEffort(failedEvent(request, nodeType.data, started.attempt, {
-        error_code: "NODE_EXECUTION_FAILED", message: "Node execution failed", retryable: false,
+        error_code: failure.code, message: failure.detail, retryable: false,
       }), request);
       await this.#recordPerformanceBestEffort(
         request, boundAgentId, "failure", executionStartedAtMs, executedMetadata,
+        failure.code,
       );
       await this.#triggerRecoveryForFailureBestEffort(request, failure);
       throw error;
@@ -455,12 +460,25 @@ export class NodeexecService {
     verdict: "success" | "failure",
     startedAtMs: number,
     metadata: Record<string, unknown> | undefined,
+    failureCode?: string,
   ): Promise<void> {
     if (
       request.node_type !== "LLMTask" ||
       agentId === undefined ||
       this.performanceRecorder === undefined
     ) {
+      return;
+    }
+    if (verdict === "failure" && !isAgentAttributableFailure(failureCode)) {
+      // Nothing was learned about the agent, so nothing is asserted about it
+      // (#164). Logged rather than silent, because "no record" and "a record
+      // that was never attempted" look identical in the table afterwards.
+      console.warn("performance observation skipped: failure not attributable to the agent", {
+        node_execution_id: request.node_execution_id,
+        run_id: request.run_id,
+        agent_id: agentId,
+        error_code: failureCode ?? "unknown",
+      });
       return;
     }
     const usage = metadata?.["usage"];
@@ -826,6 +844,82 @@ function modelAliasFromConfigJson(configJson: string): { readonly modelAlias?: "
   }
 }
 
+/**
+ * The failure codes that say something about the agent that was bound, rather
+ * than about the platform it ran on.
+ *
+ * A `performance_records` row is an assertion that this agent did badly, and
+ * Selection & Binding turns those rows into `performance_score` -- 20% of
+ * `combined_score` at the default weights -- so one row routes work away from
+ * that agent for good. A Verify Service outage, a gateway that could not be
+ * reached, a node config that never named a model: none of those are evidence
+ * about the agent, and recording them punished whichever agent happened to be
+ * bound when the platform had a bad minute (#164). It also decayed fastest for
+ * the agent currently judged best, because that is the agent most often bound
+ * and therefore most exposed.
+ *
+ * An allowlist, not a denylist of infrastructure codes: an unrecognised code
+ * is a failure nobody has classified yet, and the honest answer to "whose
+ * fault was that" is silence. Losing a negative signal costs a ranking nudge;
+ * inventing one poisons the ranking permanently.
+ */
+const AGENT_ATTRIBUTABLE_FAILURE_CODES: ReadonlySet<string> = new Set([
+  // The model's own answer failed validation -- prose where JSON was asked
+  // for, a truncated object. What the agent produced, judged on its face.
+  "MODEL_OUTPUT_INVALID",
+  // Verify Gate scored this output a fail. That is a verdict on the output,
+  // which is the agent's; VERIFY_SERVICE_UNAVAILABLE, the outage, is not here.
+  "VERIFICATION_GATE_FAILED",
+]);
+
+function isAgentAttributableFailure(code: string | undefined): boolean {
+  return code !== undefined && AGENT_ATTRIBUTABLE_FAILURE_CODES.has(code);
+}
+
+/**
+ * gRPC status numbers, named. A transport failure arrives with a numeric
+ * `code`, which carries no signal for anyone reading the row and none for
+ * FailureClassifier, whose patterns are textual. These are the ones the
+ * classifier can act on: UNAVAILABLE and INTERNAL_ERROR are infrastructure
+ * failures, DEADLINE_EXCEEDED a timeout, RESOURCE_EXHAUSTED a rate limit,
+ * PERMISSION_DENIED a tool permission denial. Named here rather than
+ * importing @grpc/grpc-js, which is an adapter concern.
+ */
+const GRPC_STATUS_NAMES: Readonly<Record<number, string>> = {
+  4: "DEADLINE_EXCEEDED",
+  7: "PERMISSION_DENIED",
+  8: "RESOURCE_EXHAUSTED",
+  13: "INTERNAL_ERROR",
+  14: "UNAVAILABLE",
+  16: "UNAUTHENTICATED",
+};
+
+function errorCodeOf(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return undefined;
+  }
+  const code = (error as { readonly code: unknown }).code;
+  if (typeof code === "string" && code.trim().length > 0) return code;
+  if (typeof code === "number") return GRPC_STATUS_NAMES[code];
+  return undefined;
+}
+
+/**
+ * What Recovery is handed to classify a node failure.
+ *
+ * The fallback was a constant -- `NODE_EXECUTION_FAILED`, message discarded --
+ * for everything that is not one of the three named types below.
+ * FailureClassifier matches on the code, and at lower confidence on the detail
+ * text, so a constant matching no pattern classified every unrecognised
+ * failure as `unknown`. The strategy table maps `unknown` to `ask_user`, which
+ * left seven of the eight dispatchable strategies unreachable in practice, and
+ * each failure still spent an ADVANCED model call to be told the input carried
+ * nothing (#149).
+ *
+ * The real message is now always kept, and a code derived wherever the error
+ * carries one. `NODE_EXECUTION_FAILED` remains only for an error offering
+ * neither.
+ */
 function persistedError(error: unknown): { readonly code: string; readonly detail: string } {
   if (error instanceof VerifyGateError) {
     return { code: error.code, detail: error.message };
@@ -836,5 +930,16 @@ function persistedError(error: unknown): { readonly code: string; readonly detai
   if (error instanceof AgentCreationFailedError) {
     return { code: error.code, detail: error.message };
   }
-  return { code: "NODE_EXECUTION_FAILED", detail: "Node execution failed" };
+  const message = error instanceof Error ? error.message.trim() : "";
+  return {
+    code: errorCodeOf(error) ?? "NODE_EXECUTION_FAILED",
+    // The class name is worth keeping when the message is empty: it is the
+    // only thing separating one silent failure from another.
+    detail:
+      message.length > 0
+        ? message
+        : error instanceof Error && error.name.length > 0
+          ? error.name
+          : "Node execution failed",
+  };
 }

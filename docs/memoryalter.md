@@ -193,6 +193,87 @@ Full reasoning, options and the code evidence behind each: [`phase-0-decisions.m
 **Consequence for Phase 0's done gate.** The action plan asks that each decision be linked from its issue; those issues are on the frozen repo. The gate's purpose is that a decision reaches whoever does the work, and here that is the component pages, not an issue tracker. Every Phase 0 decision is therefore written onto the README of every component it touches, carrying its rationale, a link to the full brief, and the original issue number.
 
 **Decided by.** Havish.
+
+### 2026-09-14 — `alter-x-4-` was never frozen in practice, and its work is imported
+
+**What was found.** The 2026-09-08 decision that `alter-x-4-` is frozen and read-only was
+never a project-wide fact. Surya Teja and Satwik Gogu continued building there throughout,
+sanctioned, confirmed by Havish on 2026-09-14. By then that repository was 29 commits ahead
+of this one past the shared fork point `d5ea2a2`, carrying all of Phase 2 and most of Phase 3.
+
+**Decision.** Import that work into `alterengine-6` rather than reverse the repository
+choice. Resolve every conflict toward this repository's design log. Opened as PR #9 on
+branch `import/alter-x-4-phase-2-3`.
+
+**What this does not settle.** Whether `alter-x-4-` now stops taking new work. Until it
+does, the two trees diverge again from the day after this merges, and this exercise repeats.
+Raised with Havish; deliberately unanswered as of this entry.
+
+**Correction to the earlier decision.** The frozen-repo entry above stays, per this file's
+append-only rule. It was true of this session's behaviour and false as a description of the
+project. Both halves matter: nothing was written to `alter-x-4-` from here, and the
+assumption that nobody else was writing to it was never checked.
+
+### 2026-09-14 — their agent auto-creation supersedes task 3.0
+
+**Decision.** Take `alter-x-4-`'s `agent_auto_creation` engine wholesale. Delete ours,
+including migration `0006_agent_auto_creation_idempotency.py`.
+
+**Why.** Both sides independently built the same idempotency design — SHA-256 over the
+sorted capability set, a partial unique index over tenant, workspace and key,
+`ON CONFLICT DO NOTHING`, tier deliberately out of the key, the same reasoning about NULLs
+and global agents. That half is a tie. Theirs additionally creates at the requested tier
+instead of a hardcoded `STANDARD`, and refuses above a configured ceiling with the reason
+`no_agent_at_required_tier` — which is **task 3.3, still open on our board**. Theirs is 288
+lines against our 321 and covers strictly more.
+
+**Aligned on import.** Their ceiling defaults to `ADVANCED`; design log §31 says the default
+is the standard tier, raised deliberately per deployment. Changed to `STANDARD`.
+
+**Consequence.** Task 3.0 is closed-then-superseded rather than simply closed. The work was
+real and its verification was real; it was overtaken by a better version of the same fix
+written elsewhere at the same time. That is the direct cost of two repositories.
+
+### 2026-09-14 — §32's residual is closed by deletion, not by making consumers read
+
+**Decision.** Accept `alter-x-4-`'s removal of the write-only `node_requirements` and
+`policy_bindings` columns (their #152). Do not revert it to preserve task 3.6's "copy the
+caller's map".
+
+**Why, having first decided the opposite.** The initial read was that this contradicted
+design log §32. Re-reading §32: it records the residual problem of a stored map plus a fresh
+run-time resolution, and names **two** clean resolutions — run-time consumers read the stored
+value, or the column is deleted as redundant. Their change takes the second. It contradicts
+the interim step, not the endpoint. It is also entangled with the task-skeleton column that
+makes replan function, so reverting it would have cost more than it protected.
+
+**Consequence.** Track C item C14 is closed by this, and task 3.6 changes meaning: there is
+no map to fill.
+
+### 2026-09-14 — the two capability score floors are removed, on better evidence than ours
+
+**Decision.** Keep `alter-x-4-`'s removal of `minimum_capability_similarity` (0.6) and
+`minimum_combined_score` (0.7) from the ranked agent query. Eligibility is decided by
+capability containment; every score now decides order only.
+
+**Why this overrides our own recorded finding.** This file records, from 2026-09-08, that
+"the existing threshold is sound" and "no re-tuning is needed" — measured capability-string
+against capability-string in isolation. That measurement was correct and answered the wrong
+question. In the real query a requirement embeds the **join** of its capabilities while an
+agent stores one embedding row per capability, so `MAX(similarity)` compares a joined query
+against a single part and falls as the requirement grows: measured 0.77 at two capabilities,
+0.75 at three, **0.51 at four**. A four-capability requirement therefore could not bind an
+agent declaring all four, fell through to auto-creation, and minted a duplicate every
+attempt. The 0.6 floor was separately unreachable — clearing a 0.7 combined score at
+similarity weight 0.8 needs capability similarity ≥ 0.625 even at a perfect performance
+score.
+
+**The lesson, which is the reusable part.** Our number was measured on an isolated pair;
+theirs was measured on the path the system actually runs. **A measurement of a component is
+not a measurement of the system that contains it**, and ours read as more settled than it was
+because it was taken carefully.
+
+
 ---
 
 ## 3. Checklist context
@@ -878,6 +959,71 @@ Havish, none on engineering.
 - **When.** 2026-09-10.
 - **Where.** `.env.local.example`, live boot of
   `dist/apps/tool-gateway/main.js` against real AWS AppConfig and Secrets Manager.
+
+### Two migrations numbered 0006, merged without a conflict
+
+- **What.** This repository added `0006_agent_auto_creation_idempotency.py`; `alter-x-4-`
+  added `0006_agent_auto_creation_key.py`. Both declare `revision = "0006"` over
+  `down_revision = "0005"`. Different filenames, so `git merge` took both and reported
+  nothing. Alembic would then have failed at runtime with two heads.
+- **Why it matters.** Every automated defence the project has was blind to it. Git saw no
+  overlapping lines; the four `scripts/check-*.sh` gates passed; CI's first failure was
+  elsewhere entirely. **Two correct files, each fine alone, broken only in combination** —
+  and the only thing that catches that class is a person knowing both sides had solved the
+  same problem.
+- **How found.** Predicted from reading both branches before merging, then reproduced: the
+  trial merge reported seven conflicts, none of them this, and the merged tree carried both
+  files.
+- **When.** 2026-09-14, during the import.
+- **Where.** `apps/intelligence-service/alembic/versions/`.
+
+### An imported placeholder convention against our own bootstrap check
+
+- **What.** `alter-x-4-`'s `.env.local.example` carries three AppConfig identifiers as live
+  `<placeholder>` assignments. C21's `bootstrap-env-local.sh --check` refuses any unresolved
+  placeholder, so CI failed: `verify: unresolved placeholder(s) remain: 402:APPCONFIG_APPLICATION_ID=<appconfig-application-id>`.
+- **Why it matters.** The check worked, on its first contact with imported work, catching a
+  convention difference rather than a defect. Their repository has no equivalent gate, so
+  nothing there objected. **Where two repositories' conventions differ, the stricter one
+  fails first and looks like the problem.**
+- **How resolved.** Commented out rather than filled. Nothing reads them unless a service is
+  deliberately switched to `appconfig`, and task 1.3 settled that the committed default stays
+  `mock`. Filling them would tie the committed default to one AWS account.
+- **When.** 2026-09-14.
+
+### Auto-creation would have minted agents invisible to the lookup that asked for them
+
+- **What.** The imported `agent_auto_creation` engine writes `embedding_metadata` as
+  `{"dimensions": 512, "source": "PLAN-8"}` — no `model_id`. The merged selection query
+  excludes any stored vector whose producing model differs from the query's, which is task
+  1.3's stale-vector protection. Combined: an agent auto-created to fill a capability gap is
+  written successfully and is then **invisible to the exact lookup that triggered its
+  creation**. No error, no failed insert. The capability stays unmatched and the next request
+  mints another agent.
+- **Why it matters most of the three.** It is #125's duplicate-agent sprawl arriving through
+  a third door, reintroduced by combining two pieces of work that are each correct. CI caught
+  only the type mismatch beside it (`Argument 1 to "embedding_vector_literal" has
+  incompatible type "EmbeddingResult"`). The provenance gap itself would have passed every
+  check in the repository and surfaced as agents quietly multiplying in production.
+- **How found.** Reading the file to fix the type error, and noticing the metadata payload
+  differed from ours.
+- **When.** 2026-09-14.
+- **Where.** `apps/intelligence-service/src/agent_auto_creation/engine.py`.
+
+### Every defect the import produced was at the seam, not inside either side's work
+
+- **What.** Four CI runs, three real defects, and all three were interactions: a duplicate
+  migration number, a placeholder convention against a stricter check, and provenance absent
+  on one side of a filter the other side added. Nothing imported was wrong in its own
+  repository, and nothing of ours was wrong before the merge.
+- **Why worth recording.** It is the argument for why an import of this size needs
+  conflict-by-conflict attention rather than a merge and a green tick. A single "resolve all
+  conflicts, run CI" pass would have produced a green build containing two of the three.
+  The test fixtures are the clearest case: the imported selection-binding tests insert
+  capability embeddings with no provenance, so under the merged query every fixture is
+  excluded from candidacy and the tests fail looking for rows they had just written, with
+  nothing in the output pointing at why.
+- **When.** 2026-09-14.
 
 ---
 

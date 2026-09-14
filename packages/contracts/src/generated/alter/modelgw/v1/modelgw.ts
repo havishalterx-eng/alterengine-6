@@ -25,6 +25,14 @@ export interface InvokeResponse {
   resolved_capability: string;
   /** true when this response came from the semantic cache, not a live model call */
   cache_hit: boolean;
+  /**
+   * What the call cost in US dollars, as a decimal string so a sub-cent amount
+   * survives the wire -- the convention ResolveUnitPriceResponse.unit_cost_minor
+   * already uses. Priced per token direction at the rate of the model that
+   * served it. Empty when that model has no price on record: an unpriced call
+   * is unknown, never free (#168).
+   */
+  estimated_cost_usd: string;
 }
 
 export interface StreamRequest {
@@ -42,6 +50,19 @@ export interface StreamResponse {
   sequence: number;
   delta: string;
   final: boolean;
+  /**
+   * The same token-usage contract InvokeResponse.usage_json carries, and
+   * empty on every chunk but the final one -- a provider only knows the
+   * totals once its stream ends. Without it a streamed call reported no usage
+   * at all, which is why every real LLMTask node recorded a NULL token_count
+   * (#163).
+   */
+  usage_json: string;
+  /**
+   * As InvokeResponse.estimated_cost_usd, and like usage_json set on the final
+   * chunk only.
+   */
+  estimated_cost_usd: string;
 }
 
 export interface RedactRequest {
