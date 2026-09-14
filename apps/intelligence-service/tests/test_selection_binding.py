@@ -29,6 +29,8 @@ from src.selection_binding import (
 )
 from src.selection_binding.policy_client import RoutingWeights
 
+_EMBEDDING_MODEL_ID = "amazon.titan-embed-text-v2:0"
+
 SERVICE_ROOT = Path(__file__).parent.parent
 PGVECTOR_IMAGE = "pgvector/pgvector:pg16"
 
@@ -46,13 +48,20 @@ PLATFORM_TENANT_ID = "ten_00000000-0000-7000-8000-000000000001"
 
 
 class FakeEmbeddingClient:
-    def __init__(self, vector: Sequence[float]) -> None:
+    """Satisfies the EmbeddingClient protocol, which returns the model that
+    produced the vector alongside it (task 1.3). alter-x-4-'s version of this
+    fake returned a bare sequence, from before provenance existed."""
+
+    def __init__(
+        self, vector: Sequence[float], model_id: str = _EMBEDDING_MODEL_ID
+    ) -> None:
         self.vector = vector
+        self.model_id = model_id
         self.calls: list[tuple[str, str]] = []
 
-    async def embed(self, *, tenant_id: str, text: str) -> Sequence[float]:
+    async def embed(self, *, tenant_id: str, text: str) -> EmbeddingResult:
         self.calls.append((tenant_id, text))
-        return self.vector
+        return EmbeddingResult(vector=self.vector, model_id=self.model_id)
 
 
 class MutableRoutingPolicyClient:
@@ -212,9 +221,10 @@ VALUES (:agent_id, CAST(:tenant_id AS uuid), CAST(:workspace_id AS uuid), :name,
             text(
                 """
 INSERT INTO capability_embeddings
-  (id, agent_id, tenant_id, capability_description, embedding)
+  (id, agent_id, tenant_id, capability_description, embedding, embedding_metadata)
 VALUES
-  (:id, :agent_id, CAST(:tenant_id AS uuid), :description, CAST(:embedding AS vector(512)))
+  (:id, :agent_id, CAST(:tenant_id AS uuid), :description, CAST(:embedding AS vector(512)),
+   CAST(:metadata AS jsonb))
 """
             ),
             {
@@ -223,6 +233,7 @@ VALUES
                 "tenant_id": tenant_uuid,
                 "description": "text.generation analysis.reasoning",
                 "embedding": vector_literal(embedding),
+                "metadata": json.dumps({"model_id": _EMBEDDING_MODEL_ID}),
             },
         )
 
@@ -267,9 +278,10 @@ VALUES (:agent_id, CAST(:tenant_id AS uuid), NULL, :name, :tier, 'active')
             text(
                 """
 INSERT INTO capability_embeddings
-  (id, agent_id, tenant_id, capability_description, embedding)
+  (id, agent_id, tenant_id, capability_description, embedding, embedding_metadata)
 VALUES
-  (:id, :agent_id, CAST(:tenant_id AS uuid), :description, CAST(:embedding AS vector(512)))
+  (:id, :agent_id, CAST(:tenant_id AS uuid), :description, CAST(:embedding AS vector(512)),
+   CAST(:metadata AS jsonb))
 """
             ),
             {
@@ -278,6 +290,7 @@ VALUES
                 "tenant_id": tenant_uuid,
                 "description": "text.generation analysis.reasoning",
                 "embedding": vector_literal(embedding),
+                "metadata": json.dumps({"model_id": _EMBEDDING_MODEL_ID}),
             },
         )
 
