@@ -123,14 +123,13 @@ A tenth follow-up adds 'memory_drift_observations': a new real GET-style
 read route (POST /drift/agents/scores) on memory-service's real
 DriftDetector/SqlAlchemyDriftRepository (previously write-only via
 compute_agent_drift). The real cross-tenant "empty_result" is NOT an
-app-level tenant check at all -- drift_scores' own `drift_read` RLS
-policy (0001_create_policy_tables.py) only permits SELECT of
-subject_type IN ('model','provider'); agent-subject rows are
-deliberately default-deny for every tenant session pending KNOW-15's
-local ownership projection, per that migration's own docstring (see
-memory_drift_client.py's own module doc). No eval-only entrypoint
-needed -- src.main:app run directly, same shape as policy_client.py's
-target.
+app-level tenant check at all -- it is drift_scores' own `drift_read`
+RLS policy, which since memory-service's 0006 admits an agent row only
+when its `tenant_id` matches the session's `app.current_tenant_id` (see
+memory_drift_client.py's own module doc). Before 0006 the policy
+excluded every agent row from every session, so this case passed for a
+reason unrelated to tenancy. No eval-only entrypoint needed --
+src.main:app run directly, same shape as policy_client.py's target.
 An eleventh follow-up adds 'ads_upload_download': ads-core's real,
 unmodified production POST /ads/ingestion/uploads/complete. Unlike
 ads_get_ingestion_job (a resource-visibility "not_found"), the real
@@ -1131,18 +1130,77 @@ class EvalRunOrchestrator:
             },
         )
 
+    def _score_planner_decompose_case(self, case: EvalCase) -> _CaseVerdict:
+        """Score a planner `decompose` case against the real planner.
+
+        This runs the same understand-then-decompose pair `_score_project_case`
+        already runs, scored on a different property: the project domain
+        asserts the shape of the task skeleton, these cases assert only whether
+        the planner noticed the objective was ambiguous. So `observed` is built
+        from `ambiguity_detected` alone rather than reusing the project
+        domain's stage_count/entry_point/stages comparison, which no planner
+        case seeds an expectation for.
+
+        Unlike `select_strategy`, this needs a live model-gateway --
+        `understand` is a real Problem Understanding call.
+        """
+        objective = str(case.input_json["objective"])
+        strategy = str(case.input_json["strategy"])
+
+        try:
+            problem_spec_json = self._planner_client.understand(
+                tenant_id=_EVAL_TENANT_ID,
+                workspace_id=_EVAL_WORKSPACE_ID,
+                run_id=_EVAL_RUN_ID,
+                objective=objective,
+            )
+            result = self._planner_client.decompose(
+                tenant_id=_EVAL_TENANT_ID,
+                workspace_id=_EVAL_WORKSPACE_ID,
+                run_id=_EVAL_RUN_ID,
+                problem_spec_json=problem_spec_json,
+                strategy=strategy,
+            )
+        except Exception as error:  # noqa: BLE001 -- real per-case isolation, see module doc
+            return _CaseVerdict(
+                verdict="fail",
+                score=0.0,
+                details={"error": f"Decompose call failed: {error}"},
+            )
+
+        observed = {"ambiguity_detected": result.ambiguity_detected}
+        expected = case.expected_json
+        real_verdict = "pass" if observed == expected else "fail"
+
+        return _CaseVerdict(
+            verdict=real_verdict,
+            score=1.0 if real_verdict == "pass" else 0.0,
+            details={
+                "observed": observed,
+                "expected": expected,
+                "stage_count": result.stage_count,
+            },
+        )
+
     def _score_planner_case(self, case: EvalCase) -> _CaseVerdict:
         operation = case.input_json.get("operation")
+        if operation == "decompose":
+            # This was refused alongside replan on the grounds that it "needs
+            # real ADS+LLM wiring". That stopped being true: _score_project_case
+            # above runs the same understand-then-decompose pair against the
+            # live planner, so the wiring the refusal named as missing is
+            # wiring this file already uses.
+            return self._score_planner_decompose_case(case)
         if operation != "select_strategy":
-            # decompose/replan need real ADS+LLM wiring -- disclosed
-            # follow-up scope (see module doc), same fail-closed pattern
-            # as an unsupported domain: never silently skipped.
+            # replan still needs a real prior plan to replan from -- disclosed
+            # follow-up scope, same fail-closed pattern as an unsupported
+            # domain: never silently skipped.
             return _CaseVerdict(
                 verdict="fail",
                 score=0.0,
                 details={
                     "error": f"unsupported operation {operation!r} for domain=planner "
-                    "(only select_strategy is real as of HARD-7b)"
+                    "(select_strategy and decompose are real)"
                 },
             )
 

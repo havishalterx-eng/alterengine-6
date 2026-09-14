@@ -53,6 +53,8 @@ describe("orchestration migration files", () => {
       "0033_add_run_deadline.sql",
       "0034_create_run_dispatch_queue.sql",
       "0035_add_workflow_version_test_gate.sql",
+      "0036_add_workflow_version_task_skeleton.sql",
+      "0037_drop_workflow_version_requirements_columns.sql",
     ]);
     expect(
       readdirSync(resolve(ORCHESTRATION_MIGRATIONS_PATH, "rollback"))
@@ -95,6 +97,8 @@ describe("orchestration migration files", () => {
       "0033_remove_run_deadline.sql",
       "0034_drop_run_dispatch_queue.sql",
       "0035_remove_workflow_version_test_gate.sql",
+      "0036_remove_workflow_version_task_skeleton.sql",
+      "0037_restore_workflow_version_requirements_columns.sql",
     ]);
   });
 

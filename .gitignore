@@ -19,3 +19,9 @@ tmp/
 *.tsbuildinfo
 packages/*/src/**/*.js
 packages/*/src/**/*.js.map
+.eval-helpers/
+
+# Local end-to-end proof scratch (ids and a mock-issuer token); never committed.
+.prove-ids
+.prove-token
+prove-healing-loop.mjs

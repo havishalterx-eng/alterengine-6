@@ -8,6 +8,9 @@ import type {
 } from "@alterx/contracts";
 import { ModelGatewayClient } from "./modelgw-client";
 
+// Usage totals ride the final stream chunk only (#163).
+const STREAM_USAGE_JSON = JSON.stringify({ input_tokens: 12, output_tokens: 34 });
+
 function fakeGrpcClient(
   handler: (
     request: ModelgwInvokeRequest,
@@ -47,6 +50,7 @@ describe("ModelGatewayClient", () => {
         usage_json: JSON.stringify({ totalTokens: 12 }),
         resolved_capability: "FAST:aws-bedrock",
         cache_hit: false,
+        estimated_cost_usd: "",
       },
     }));
     const client = new ModelGatewayClient(
@@ -79,6 +83,7 @@ describe("ModelGatewayClient", () => {
             usage_json: "{}",
             resolved_capability: "FAST:test",
             cache_hit: false,
+            estimated_cost_usd: "",
           });
         },
       ),
@@ -118,9 +123,9 @@ describe("ModelGatewayClient", () => {
   it("forwards server-streamed deltas in order with a bounded deadline", async () => {
     let deadline: Date | undefined;
     const responses: readonly ModelgwStreamResponse[] = [
-      { sequence: 1, delta: "hello", final: false },
-      { sequence: 2, delta: " world", final: false },
-      { sequence: 3, delta: "", final: true },
+      { sequence: 1, delta: "hello", final: false, usage_json: "", estimated_cost_usd: "" },
+      { sequence: 2, delta: " world", final: false, usage_json: "", estimated_cost_usd: "" },
+      { sequence: 3, delta: "", final: true, usage_json: STREAM_USAGE_JSON, estimated_cost_usd: "0.0000035" },
     ];
     const grpcClient = {
       invoke: vi.fn(),

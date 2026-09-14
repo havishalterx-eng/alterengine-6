@@ -112,7 +112,9 @@ WITH performance AS (
         WHEN 'failure' THEN 0.0
         WHEN 'escalated' THEN 0.0
       END
-    )::double precision AS performance_score
+    )::double precision AS performance_score,
+    AVG(pr.latency_ms)::double precision AS mean_latency_ms,
+    AVG(pr.token_count)::double precision AS mean_token_count
   FROM performance_records AS pr
   WHERE pr.tenant_id = CAST(:tenant_id AS uuid)
     AND pr.node_type = :node_type
@@ -129,13 +131,15 @@ WITH performance AS (
     MAX(
       1.0 - (ce.embedding <=> CAST(:query_embedding AS vector(512)))
     )::double precision AS capability_similarity,
-    COALESCE(performance.performance_score, 0.5) AS performance_score
+    COALESCE(performance.performance_score, 0.5) AS performance_score,
+    performance.mean_latency_ms,
+    performance.mean_token_count
   FROM agents AS a
   JOIN capability_embeddings AS ce
     ON ce.tenant_id = a.tenant_id
    AND ce.agent_id = a.id
   JOIN LATERAL (
-    SELECT av.version_number
+    SELECT av.version_number, av.capabilities
     FROM agent_versions AS av
     WHERE av.tenant_id = a.tenant_id
       AND av.agent_id = a.id
@@ -148,6 +152,16 @@ WITH performance AS (
       a.tenant_id = CAST(:tenant_id AS uuid)
       OR a.tenant_id = CAST(:platform_tenant_id AS uuid)
     )
+    -- The agent has to declare what is being asked for, not merely embed near
+    -- it. Until this existed, eligibility was tenant, workspace, status, tier
+    -- and a vector distance -- a ranking signal doing a matching job, which is
+    -- how an unrelated capability could bind (#158).
+    --
+    -- Containment, with the same `@>` the capability registry already uses on
+    -- supported_capabilities: the requirement's set must be a subset of what
+    -- the agent published. An empty requirement contains nothing, so `@> '[]'`
+    -- holds for every agent, which is the right no-op.
+    AND latest_version.capabilities @> CAST(:required_capabilities AS jsonb)
     AND (
       ce.tenant_id = CAST(:tenant_id AS uuid)
       OR ce.tenant_id = CAST(:platform_tenant_id AS uuid)
@@ -177,7 +191,9 @@ WITH performance AS (
     a.id,
     a.tier,
     latest_version.version_number,
-    performance.performance_score
+    performance.performance_score,
+    performance.mean_latency_ms,
+    performance.mean_token_count
 ), ranked AS (
   SELECT
     agent_id,
@@ -188,9 +204,25 @@ WITH performance AS (
     (
       :similarity_weight * capability_similarity
       + :performance_weight * performance_score
-    ) AS combined_score
+    ) AS combined_score,
+    -- Same shape architecture_binder.py already scores availability with:
+    -- 1/(1+x), which is 1.0 at zero and falls away monotonically, so no
+    -- ceiling has to be invented for either quantity. Latency is divided by
+    -- 1000 to put a second at 0.5; tokens by 1000 for the same reason, a
+    -- thousand-token call scoring the same as a one-second one.
+    --
+    -- 0.5 for an agent with no history, matching the neutral
+    -- performance_score above: never having run is not evidence of being
+    -- cheap, and must not beat a measured competitor.
+    (
+      (
+        CASE WHEN mean_latency_ms IS NULL THEN 0.5
+             ELSE 1.0 / (1.0 + mean_latency_ms / 1000.0) END
+        + CASE WHEN mean_token_count IS NULL THEN 0.5
+               ELSE 1.0 / (1.0 + mean_token_count / 1000.0) END
+      ) / 2.0
+    ) AS efficiency_score
   FROM candidate_similarity
-  WHERE capability_similarity >= :minimum_capability_similarity
 )
 SELECT
   agent_id,
@@ -198,10 +230,43 @@ SELECT
   agent_version,
   capability_similarity,
   performance_score,
-  combined_score
+  combined_score,
+  efficiency_score
 FROM ranked
-WHERE combined_score >= :minimum_combined_score
-ORDER BY combined_score DESC, capability_similarity DESC, agent_id ASC
+-- No score floor. Containment above decides eligibility; every score here
+-- decides order.
+--
+-- Two floors used to sit here. Measured against real Titan embeddings, one
+-- was unreachable and the other was rejecting agents that declare exactly
+-- what was asked for:
+--
+--   * minimum_capability_similarity = 0.6 could never fire. Clearing
+--     combined_score >= 0.7 at similarity_weight 0.8 needs capability
+--     similarity >= (0.7 - 0.2 * performance_score) / 0.8, which is 0.625
+--     even at a perfect performance_score of 1.0 -- above 0.6 for every
+--     input. A filter that cannot reject a row the next filter keeps is dead
+--     weight, and re-tuning it could only have moved it between doing
+--     nothing and doing the next filter's job.
+--
+--   * minimum_combined_score = 0.7 did fire, on the wrong rows. A requirement
+--     embeds the join of its capabilities, while an agent stores one
+--     embedding row per capability, so MAX(similarity) compares a joined
+--     query against a single part and falls as the requirement grows:
+--     measured 0.77 for two capabilities, 0.75 for three, 0.51 for four. A
+--     four-capability requirement therefore could not bind an agent
+--     declaring all four, and fell through to auto-creation, minting a
+--     duplicate every attempt -- the sprawl #125 and #157 closed, through a
+--     different door.
+--
+-- What the floors were guarding is now guarded by containment: an agent that
+-- does not declare the capability is not a candidate at all. One that
+-- declares it but carries a stale embedding still binds, and ranks below
+-- agents whose embeddings agree with it -- the right answer, because the
+-- published capability list, not the vector, is what the agent promised.
+ORDER BY
+  combined_score + :efficiency_weight * efficiency_score DESC,
+  combined_score DESC,
+  agent_id ASC
 LIMIT 1
 """
 )
@@ -254,24 +319,27 @@ class SelectionBindingEngine:
         embedding_client: EmbeddingClient,
         *,
         similarity_weight: float = 0.8,
-        minimum_capability_similarity: float = 0.6,
-        minimum_combined_score: float = 0.7,
+        # How far measured latency and token cost may move the ranking. Small
+        # on purpose: a cheap agent should win between comparable candidates,
+        # not beat a clearly better-matched one. The default only applies
+        # where the tenant's routing policy does not set one -- like
+        # similarity_weight, it is read from the active routing_weights policy
+        # per request, so an operator can retune it and drift carries it
+        # forward (#159).
+        efficiency_weight: float = 0.25,
         policy_client: RoutingPolicyClient | None = None,
         persona_creation_engine: PersonaCreationEngine | None = None,
     ) -> None:
         if not 0.0 <= similarity_weight <= 1.0:
             raise ValueError("similarity_weight must be between 0 and 1")
-        if not 0.0 <= minimum_capability_similarity <= 1.0:
-            raise ValueError("minimum_capability_similarity must be between 0 and 1")
-        if not 0.0 <= minimum_combined_score <= 1.0:
-            raise ValueError("minimum_combined_score must be between 0 and 1")
+        if not 0.0 <= efficiency_weight <= 1.0:
+            raise ValueError("efficiency_weight must be between 0 and 1")
 
         self._session = session
         self._embedding_client = embedding_client
         self._similarity_weight = similarity_weight
+        self._efficiency_weight = efficiency_weight
         self._performance_weight = 1.0 - similarity_weight
-        self._minimum_capability_similarity = minimum_capability_similarity
-        self._minimum_combined_score = minimum_combined_score
         self._policy_client = policy_client
         self._persona_creation_engine = persona_creation_engine
 
@@ -308,24 +376,26 @@ class SelectionBindingEngine:
             text="\n".join(requirement.capabilities),
         )
         query_embedding = embedding_vector_literal(embedding_result.vector)
-        similarity_weight = await self._load_similarity_weight(request.tenant_id)
-        result = await self._session.execute(
-            _RANKED_AGENT_QUERY,
-            {
-                "tenant_id": tenant_uuid,
-                "workspace_id": workspace_uuid,
-                "platform_tenant_id": PLATFORM_TENANT_ID,
-                "required_tier": requirement.model_alias,
-                "node_type": context.node_type,
-                "task_category": context.task_category,
-                "query_embedding": query_embedding,
-                "embedding_model_id": embedding_result.model_id,
-                "similarity_weight": similarity_weight,
-                "performance_weight": 1.0 - similarity_weight,
-                "minimum_capability_similarity": self._minimum_capability_similarity,
-                "minimum_combined_score": self._minimum_combined_score,
-            },
-        )
+        similarity_weight, efficiency_weight = await self._load_weights(request.tenant_id)
+        query_parameters: dict[str, object] = {
+            "tenant_id": tenant_uuid,
+            "workspace_id": workspace_uuid,
+            "platform_tenant_id": PLATFORM_TENANT_ID,
+            "required_tier": requirement.model_alias,
+            # Sorted only for a stable query plan and readable logs; `@>` is
+            # set containment and does not care about order.
+            "required_capabilities": json.dumps(
+                sorted(requirement.capabilities), separators=(",", ":")
+            ),
+            "node_type": context.node_type,
+            "task_category": context.task_category,
+            "query_embedding": query_embedding,
+            "embedding_model_id": embedding_result.model_id,
+            "similarity_weight": similarity_weight,
+            "performance_weight": 1.0 - similarity_weight,
+            "efficiency_weight": efficiency_weight,
+        }
+        result = await self._session.execute(_RANKED_AGENT_QUERY, query_parameters)
         candidate = result.mappings().first()
         await self._report_stale_embeddings(
             tenant_uuid=tenant_uuid,
@@ -333,17 +403,11 @@ class SelectionBindingEngine:
             embedding_model_id=embedding_result.model_id,
         )
         if candidate is None:
-            no_match = NoAgentMatch(
-                node_key=request.node_key,
-                reason="no_eligible_agent",
-            )
-            if self._persona_creation_engine is None:
-                return no_match
-            return await self._create_and_bind(
-                no_match=no_match,
+            return await self._no_candidate(
                 request=request,
                 context=context,
                 requirement=requirement,
+                query_parameters=query_parameters,
             )
 
         return _response(candidate, requirement)
@@ -387,6 +451,46 @@ class SelectionBindingEngine:
                 embedding_model_id,
             )
 
+    async def _no_candidate(
+        self,
+        *,
+        request: BindAgentModelToolRequest,
+        context: BindingContext,
+        requirement: NodeRequirement,
+        query_parameters: dict[str, object],
+    ) -> BindingOutcome:
+        """Tell a capability gap apart from a tier gap, then act on which it is.
+
+        One reason code used to cover both, and auto-creation acted on it
+        either way -- which is how a tier gap produced an agent that failed the
+        very filter that caused the no-match, once per attempt forever.
+
+        The same ranked query, re-run with the tier filter disabled, is what
+        separates them: if a capability-eligible agent appears once tier is not
+        considered, the requirement's tier is the only thing that excluded it.
+        One extra query, and only on the path that already found nothing.
+        """
+        if requirement.model_alias is not None:
+            without_tier = await self._session.execute(
+                _RANKED_AGENT_QUERY,
+                {**query_parameters, "required_tier": None},
+            )
+            if without_tier.mappings().first() is not None:
+                return NoAgentMatch(
+                    node_key=request.node_key,
+                    reason="no_agent_at_required_tier",
+                )
+
+        no_match = NoAgentMatch(node_key=request.node_key, reason="no_eligible_agent")
+        if self._persona_creation_engine is None:
+            return no_match
+        return await self._create_and_bind(
+            no_match=no_match,
+            request=request,
+            context=context,
+            requirement=requirement,
+        )
+
     async def _create_and_bind(
         self,
         *,
@@ -415,14 +519,36 @@ class SelectionBindingEngine:
             tool_names=[tool.name for tool in requirement.tools or []],
         )
 
-    async def _load_similarity_weight(self, tenant_id: str) -> float:
+    async def _load_weights(self, tenant_id: str) -> tuple[float, float]:
+        """The tenant's routing weights, each falling back on its own.
+
+        A policy that sets one weight and not the other leaves the unset one
+        at this engine's default, rather than the whole lookup counting as a
+        miss -- bodies written before `efficiency_weight` existed carry only
+        `similarity_weight`, and they must keep meaning what they meant.
+
+        Any failure reaching the policy store falls back to both defaults:
+        routing on stale weights is a worse answer than routing on the
+        configured ones, but refusing to bind because a policy read failed is
+        worse than either.
+        """
+        defaults = (self._similarity_weight, self._efficiency_weight)
         if self._policy_client is None:
-            return self._similarity_weight
+            return defaults
         try:
-            weight = await self._policy_client.similarity_weight(tenant_id)
+            weights = await self._policy_client.routing_weights(tenant_id)
         except Exception:
-            return self._similarity_weight
-        return self._similarity_weight if weight is None else weight
+            return defaults
+        if weights is None:
+            return defaults
+        return (
+            self._similarity_weight
+            if weights.similarity_weight is None
+            else weights.similarity_weight,
+            self._efficiency_weight
+            if weights.efficiency_weight is None
+            else weights.efficiency_weight,
+        )
 
     async def _bind_preferred(
         self,

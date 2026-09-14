@@ -513,6 +513,13 @@ export interface ModelInvocationResult {
   // entry succeeded. Never silently absent: callers must always be able to
   // see whether a downgrade happened.
   readonly servedBy: string;
+  // The model id that served it. servedBy names only the provider, and one
+  // provider serves models at very different prices, so pricing a call needs
+  // this; under failover it is the fallback entry's model, not the primary's.
+  // Optional so a provider that predates it still type-checks -- the gateway
+  // then prices the alias's bound model, which is right whenever no failover
+  // happened.
+  readonly servedModelId?: string;
 }
 
 export type ModelInvocationStreamChunk =
@@ -528,6 +535,8 @@ export type ModelInvocationStreamChunk =
       readonly final: true;
       readonly usageJson: string;
       readonly servedBy: string;
+      // As ModelInvocationResult.servedModelId.
+      readonly servedModelId?: string;
     };
 
 export interface ModelProvider extends BaseProvider<"ModelProvider"> {
@@ -845,6 +854,17 @@ export class ModelGatewayCostLimitExceededError extends Error {
 }
 
 export class ModelGatewayInvalidResponseError extends Error {
+  /**
+   * Carried so a node failure can be classified rather than guessed at.
+   *
+   * NodeexecService puts this on `node_executions.error.code`, and
+   * FailureClassifier scores `OUTPUT_INVALID` as a logic_output_failure --
+   * which selects escalate_model, then replan, instead of the ask_user every
+   * unclassified failure fell through to. A model answering in prose where
+   * JSON was asked for is the textbook case for it (#149).
+   */
+  readonly code = "MODEL_OUTPUT_INVALID";
+
   constructor(reason: string) {
     super(`Model response failed validation: ${reason}`);
     this.name = "ModelGatewayInvalidResponseError";
