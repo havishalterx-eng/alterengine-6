@@ -27,6 +27,7 @@ from src.selection_binding import (
     NoAgentMatch,
     SelectionBindingEngine,
 )
+from src.selection_binding.embedding_client import EmbeddingResult
 from src.selection_binding.policy_client import RoutingWeights
 
 _EMBEDDING_MODEL_ID = "amazon.titan-embed-text-v2:0"

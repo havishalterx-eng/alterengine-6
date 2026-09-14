@@ -169,11 +169,11 @@ class AgentAutoCreationEngine:
 
         persona_description = _persona_description(requirement)
         embedding_text = "\n".join(requirement.capabilities)
-        raw_embedding = await self._embedding_client.embed(
+        embedding_result = await self._embedding_client.embed(
             tenant_id=request.tenant_id,
             text=embedding_text,
         )
-        embedding = embedding_vector_literal(raw_embedding)
+        embedding = embedding_vector_literal(embedding_result.vector)
 
         persona = {
             "capability_profile": requirement.model_dump(exclude_none=True),
@@ -255,8 +255,16 @@ class AgentAutoCreationEngine:
                 "tenant_id": tenant_uuid,
                 "capability_description": persona_description,
                 "embedding": embedding,
+                # model_id is not decoration: selection-binding excludes any
+                # stored vector whose producing model differs from the query's
+                # (task 1.3). Written without it, an agent auto-creation just
+                # minted would be invisible to the very lookup that asked for it.
                 "embedding_metadata_json": json.dumps(
-                    {"dimensions": 512, "source": "PLAN-8"},
+                    {
+                        "dimensions": 512,
+                        "source": "PLAN-8",
+                        "model_id": embedding_result.model_id,
+                    },
                     separators=(",", ":"),
                     sort_keys=True,
                 ),
