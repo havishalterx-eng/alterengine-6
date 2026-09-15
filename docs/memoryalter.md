@@ -274,6 +274,59 @@ not a measurement of the system that contains it**, and ours read as more settle
 because it was taken carefully.
 
 
+### 2026-09-15 — four Track C decisions, each attacked before it was put
+
+Approved by Havish 2026-09-15, after asking for a recommendation and reasoning rather than a
+menu. Three of the four changed materially under attack, and in two cases the better answer
+was not among the options originally offered.
+
+**C15 — `ALTER_CONFIG_SOURCE` splits in two, and rides with C2.** The variable is asked two
+questions at once: *real or mock*, and *where does real configuration live*. Engine services
+hear the first; `platform-api` and `audit-service` hear the second — both accept
+`appconfig|local-file` (`env.schema.ts:28`, `environment.ts:4`). Scoped overrides have grown
+to `AUDIT_CONFIG_SOURCE` and `MODEL_GATEWAY_CONFIG_SOURCE`, the second added by the import.
+
+*First draft:* ratify the scoped overrides as the documented pattern, since three already
+exist. *What the attack found:* that keeps one name meaning different things in different
+files — design log §7 pattern 4 — and grows by one variable per service forever. **The better
+answer was already on the board.** C2's `RUNTIME_MODE` switch answers the first question, so
+once it exists `ALTER_CONFIG_SOURCE` answers only the second and every service can accept the
+same two values. The scoped overrides then collapse rather than multiply. **C15 is therefore
+implemented as part of C2, not separately.**
+
+**C17 — the semantic cache becomes exact-match only, and the eval harness bypasses it.**
+*First draft:* keep it on, exempt the golden sets. *What the attack found:* two
+classification prompts differing by one entity name can sit above 0.95 similarity. That is
+not a cache hit, it is the wrong answer delivered quickly, and nobody decided to enable it —
+it arrives as a side effect of wiring real embeddings (task 1.2). Requiring an exact match
+keeps the speedup already observed (15.5× on our own golden-set run 2, byte-identical output)
+and removes the unapproved behaviour change. Design log §12's deferral of this plane is
+honoured rather than contradicted. The harness bypass is independent and unconditional:
+otherwise the score measures the cache.
+
+**C19 — prefixed outside, bare inside.** `ten_`-prefixed identifiers everywhere a human or
+another system sees them, including AWS resource names and API surfaces; bare UUIDs inside
+the database. *First draft:* prefix everywhere. *What the attack found:* the columns are
+already UUID-typed, so prefix-everywhere means stripping and re-adding at every boundary and
+does not match what storage already is. This rule is less change, not more, and in practice
+means recreating only the bare-UUID secrets rather than all four shapes.
+
+**C20 — add `bedrock` to the provider enum, and give the primary an explicit provider.**
+*First draft, and it was wrong:* "make the fallback a model id like the primary", offered
+while stating the schema could not be located. It was located at
+`packages/contracts/src/model-alias-policy.ts:11-18`, and **`FallbackBindingSchema` already
+carries `{provider, model_id}`**. The real asymmetry is narrower: the primary is a bare
+`model_id` with Bedrock implied by convention, and `FallbackProviderSchema` is
+`z.enum(["anthropic", "openai"])` with no `bedrock` member. Adding it, plus an explicit
+provider on the primary defaulting to `bedrock`, makes both ends say the same thing and makes
+the fallback usable immediately.
+
+**The lesson from C20, which is the reusable part.** A recommendation was given while
+explicitly flagging that its own subject had not been read. The flag was honest and the
+recommendation was still wrong, in the direction of proposing work that was already done.
+**Saying "I could not find it" is not a substitute for finding it** when the answer changes
+what gets built.
+
 ---
 
 ## 3. Checklist context

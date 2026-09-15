@@ -437,7 +437,10 @@ demo.
 - [ ] **C1 architecture gates.** Export the 11 AST gates from `alterengine--5`, each with a
       baseline allowlist of every current violation, so they fail only on **new** ones.
       Nobody stops for a cleanup sprint; every later fix lands governed.
-- [ ] **C2 `RUNTIME_MODE` switch** (§7 pattern 2). In production, any mock selection is a
+- [ ] **C2 `RUNTIME_MODE` switch — now carries C15.** *Decided 2026-09-15.* `RUNTIME_MODE`
+      answers *real or mock*; `ALTER_CONFIG_SOURCE` is then left answering only *where real
+      configuration lives*, with one value set every service accepts, and the scoped overrides
+      (`AUDIT_CONFIG_SOURCE`, `MODEL_GATEWAY_CONFIG_SOURCE`) collapse into it. Original scope: (§7 pattern 2). In production, any mock selection is a
       fatal boot error, never a silent fallback. Do alongside Phase 1.
 - [ ] **C3 deletion registration in CI** (§18, §28). Do before more components store tenant
       data. The old build's erasure certified complete while data survived in ten tables it
@@ -536,7 +539,11 @@ demo.
       the real credentials are fine. **Second instance of the pattern `AWS_ENDPOINT_URL`
       showed in 1.2**: a LocalStack variable silently defeating the real-AWS path, failing in
       a way that points at the wrong thing. 1.2's instance got a fatal guard; this one has none.
-- [ ] **C20 the fallback chain cannot express a working provider.**
+- [x] **C20 fallback chain — DECIDED 2026-09-15, and the fix is smaller than recorded.**
+      `FallbackBindingSchema` already carries `{provider, model_id}`
+      (`packages/contracts/src/model-alias-policy.ts:11-18`). Add `bedrock` to
+      `FallbackProviderSchema`, and give the primary an explicit provider defaulting to
+      `bedrock`. Implementation still to do. Original scope:
       `FallbackProviderSchema` is `z.enum(["anthropic", "openai"])`, so a fallback may only
       name Anthropic or OpenAI. Anthropic is out of scope by decision, and OpenAI-on-Bedrock
       returned no text when tested. The primary `model_id` is a free string and takes any
@@ -544,7 +551,10 @@ demo.
       unusable. The question is not whether to add a member: it is whether a *provider* enum
       is the right shape when the primary is addressed by model id. Decide the shape, not the
       contents.
-- [ ] **C19 tenant-id format drift, now in AWS resource names.** Tavily integration secrets
+- [x] **C19 tenant-id format — DECIDED 2026-09-15: prefixed outside, bare inside.** `ten_`
+      at every external surface including AWS resource names; bare UUID inside the database,
+      which is what the columns already are. Only the bare-UUID secrets need recreating.
+      Implementation still to do. Original scope: Tavily integration secrets
       exist under four shapes for what looks like one tenant: a bare UUID, two `ten_`-prefixed
       variants, and `ten_test0000…`. Same drift as the Cost Ledger tenancy split, except
       fixing it here means recreating tenant secrets rather than editing a query. Decide the
@@ -562,14 +572,20 @@ demo.
       Titan-space rows are currently indistinguishable. Needs a provenance column and a
       re-embed path before any tenant with real data switches. **Found by task 1.2's
       counterfactual needing two vector rows for one capability.**
-- [ ] **C17 decide what the semantic cache is for.** `model-gateway` consults a semantic
+- [x] **C17 what the semantic cache is for — DECIDED 2026-09-15.** Exact-match only until
+      the plane is deliberately designed (design log §12), and the eval harness bypasses it
+      unconditionally. Keeps the measured 15.5× speedup on identical text; removes a semantic
+      behaviour change nobody approved. Implementation still to do. Original scope: `model-gateway` consults a semantic
       cache before every model call, threshold 0.95, on both invoke and stream paths. Under
       mock embeddings everything clusters at 0.85–0.87 so it only hits on identical text;
       **real embeddings will push near-identical prompts past 0.95 and make it genuinely
       semantic — a behaviour change task 1.2 causes as a side effect that nobody decided.**
       Design log §12 defers this plane past v1, yet it is built and live. Also decide whether
       eval golden sets bypass it, or the harness measures the cache rather than the model.
-- [ ] **C15 one variable, one question — `ALTER_CONFIG_SOURCE`.** Engine services ask
+- [x] **C15 one variable, one question — DECIDED 2026-09-15, implemented as part of C2.**
+      The split is the answer: `RUNTIME_MODE` takes *real or mock*, `ALTER_CONFIG_SOURCE` keeps
+      *appconfig or local-file* for everyone. Not closed by code yet — closed as a decision.
+      Original scope: Engine services ask
       "mock or appconfig?"; platform-api asks "file or appconfig?". Two different questions
       wearing one name, currently resolved by per-service scoped overrides
       (`AUDIT_CONFIG_SOURCE`, and `PLATFORM_API_CONFIG_SOURCE` added in 1.2). Two instances
