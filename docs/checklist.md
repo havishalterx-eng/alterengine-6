@@ -259,7 +259,15 @@ cannot heal itself.
       prompt's gate: its Docker socket was denied and its AWS route was dead, and a partial
       live run nobody scoped in advance is how a phase gets closed on evidence that does not
       cover it.
-- [ ] **2.4b [+] the two steps that need a real provider.** *Prompt ready
+- [!] **2.4b [+] BLOCKED on a missing mechanism, not on a provider. Found 2026-09-15.** Step 6
+      — a drift score changing the next selection — **cannot be demonstrated, because nothing
+      reads a drift score.** Selection ranks on `performance_records` in intelligence-service's
+      database; `drift_scores` lives in memory-service's and is read only by memory-service and
+      the eval harness. `DriftAction`'s `weight_decay` is written onto the row and never acted
+      on. Selection *does* read routing weights from Policy Store, so the only missing link is
+      drift writing a policy — design log §17's inward path. **This is a build, not a test.**
+      Step 5 (a genuine model-output failure classified as `logic_output_failure`) is still
+      provable with Bedrock and remains in scope. Opens **C28**. Original scope: *Prompt ready
       [`prompts/revive-24b-healing-loop-real-provider.md`](prompts/revive-24b-healing-loop-real-provider.md)
       — needs Docker AND Bedrock in `ap-south-1`.* A genuine model-output failure classified
       as `logic_output_failure`, and **a drift score changing the next selection**. The
@@ -557,6 +565,12 @@ demo.
       minutes, so this is invisible from outside. **It blocks every task whose artefact is a
       test, and it blocked 2.4a.** Pairs naturally with C25 — both are "the tooling config
       nobody looked at".
+- [ ] **C28 [+] the Drift Detector's inward path to Policy Store (§17).** Drift scores compute,
+      persist, and are readable by their tenant — and nothing consumes them. `DriftAction`
+      records `weight_decay` as an intent no code performs. Selection reads routing weights from
+      Policy Store, so the shortest honest fix is for a drift verdict to propose a policy rather
+      than for selection to read drift directly — which would also give the engine one place
+      where "what we learned" turns into "what we do". **Phase 2's done gate depends on this.**
 - [ ] **C25 no root `eslint.config` file exists anywhere in the repo**, despite `lint` being a
       real, invoked target. Found while tracing a dependency-scan advisory to `@nx/eslint`; not
       investigated further — surfaced for someone to look at.

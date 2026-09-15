@@ -1145,6 +1145,39 @@ Havish, none on engineering.
 - **When.** 2026-09-15.
 - **Where.** Clone location, not code.
 
+### A drift score cannot change the next selection, because nothing reads one
+
+- **What.** Phase 2's done gate ends "...and move a Drift score that changes the next
+  selection." **There is no path from a drift score to a selection.** Traced end to end
+  2026-09-15:
+  - `drift_scores` lives in memory-service's policy database. Its only readers anywhere are
+    memory-service's own repository and the eval harness's `memory_drift_client.py`.
+    **Selection & Binding never reads it.**
+  - Selection's ranked query computes `performance_score` from `performance_records` in
+    *intelligence-service's* database — verdicts, latency and token counts — plus capability
+    similarity and an efficiency term. Nothing in it references drift.
+  - `DriftAction` is `Literal["none", "flagged", "weight_decay"]`. The action is **written onto
+    the row and never acted on**. `weight_decay` names an intent that no code performs.
+  - Selection does read routing weights from memory-service's Policy Store over HTTP
+    (`policy_client.py`), so a policy *can* move the ranking. **Drift never writes a policy.**
+- **So the chain is:** drift computed and persisted, then a gap, then Policy Store, then
+  routing weights, then the ranking. Only the gap is missing, and it is the link design log
+  §17 requires — the Drift Detector's inward path to Policy Store. The component ledger already
+  says of Drift Detector that neither §17 path "is reachable today"; this establishes the same
+  thing from the code rather than from the assessment, and names exactly which link is absent.
+- **Why it matters for the phase.** 2.4b's step 6 is not a test waiting to be written. **It is
+  a build that was never done**, and no amount of running the system will demonstrate it. The
+  gate as worded cannot be met today by anyone, in either repository.
+- **What it does not undermine.** Drift scores compute, persist, and are readable by the tenant
+  that owns them — verified 2026-09-15 by memory-service's own integration tests. The detector
+  works. Nothing consumes it.
+- **How found.** Attempting 2.4b, by tracing the ranked query's inputs rather than running it.
+  Reading answered in minutes what a live run would have shown only as "the same agent won
+  again", which is indistinguishable from a drift score that is simply too small.
+- **When.** 2026-09-15.
+- **Where.** `apps/intelligence-service/src/selection_binding/engine.py` (ranked query),
+  `apps/memory-service/src/drift/`, `drift_scores`.
+
 ---
 
 ## 6. Component ledger
