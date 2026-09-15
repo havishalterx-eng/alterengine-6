@@ -354,7 +354,7 @@ function injectVerificationGates(
   }
 }
 
-function computeWaves(
+export function computeWaves(
   nodes: CompiledDag["nodes"],
   edges: CompiledDag["edges"],
 ): CompiledDag["waves"] {
