@@ -239,7 +239,18 @@ cannot heal itself.
       with its own migration (alter-x-4- #142). Original scope: — small, real. `drift_read` admits only model and provider
       subjects, so agent drift scores compute, persist, and return zero rows to their own
       tenant. Add the agent subject.
-- [ ] **2.4a [+] the healing loop, everything provable locally.** *Prompt ready
+- [x] **2.4a [+] the healing loop, everything provable locally. DEMONSTRATED 2026-09-15, PR #10.**
+      One deliberately failed node driven through the real `RecoveryPolicyService` and real
+      `RecoveryDispatchService`, with a real `PostgresRecoveryRunReader` against real Postgres:
+      classified `logic_output_failure` from a persisted row, strategy chosen and its outcome
+      written to `recovery_actions`, and **replan handed the planner the persisted task
+      skeleton** — asserted positively against the stored skeleton and negatively against the
+      compiled DAG's own `waves` and `edges`. The no-skeleton version declines rather than
+      calling the planner. **Proven to fail:** reintroducing the pre-#145 behaviour fails both
+      tests. Runs in CI by convention — the test target globs `src/**/*.spec.ts` and a
+      Testcontainers spec in the same folder already runs there. Drift read-back as the owning
+      tenant was verified separately by memory-service's own `test_drift_integration.py`
+      (2 tests, 15.09s), which asserts the agent subject. Original scope: *Prompt ready
       [`prompts/revive-24a-healing-loop-local.md`](prompts/revive-24a-healing-loop-local.md)
       — needs Docker, does NOT need AWS.* Four of the six steps need no model provider: a
       real named failure reaching Recovery, classification and strategy selection, replan

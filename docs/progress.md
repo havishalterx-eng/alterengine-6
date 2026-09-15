@@ -45,6 +45,10 @@ Format: `YYYY-MM-DD · task · what was demonstrated · who verified`
 - `2026-09-14 · import · 29 commits of alter-x-4- Phase 2 and Phase 3 work merged into a branch, seven conflicts resolved by hand, CI green on the fourth run (34877005230) · verified against the API, not the watch command`
 - `2026-09-14 · import · duplicate alembic revision 0006 caught before it shipped: git merged both files without reporting a conflict and all four gate scripts passed · reproduced live in a trial merge, then removed`
 - `2026-09-14 · import · auto-created agents would have been invisible to the lookup that created them (embedding written with no model_id, against task 1.3's provenance filter) · found by reading, not by any check; fixed and CI green`
+- `2026-09-15 · 2.4a · one deliberately failed node classified, dispatched, and replanned from the persisted task skeleton against real Postgres; proven to fail by reintroducing the pre-#145 compiled-DAG behaviour · verified live, CI green on the branch (34949214600)`
+- `2026-09-15 · 2.4a · full recovery suite run on a developer machine for the first time: 9 spec files, 87 tests · verified live`
+- `2026-09-15 · 2.4a · agent drift computed, persisted and read back as the owning tenant · verified by memory-service test_drift_integration.py against real Postgres, 2 tests`
+- `2026-09-15 · C27 · withdrawn: the local test hang was the clone location, not the repository. Same spec runs in 141ms from ~/alter-work · verified by re-running the identical command from both places`
 
 ---
 
@@ -63,7 +67,8 @@ applications (sandbox-service, provisioning-service), and the Anthropic/OpenAI k
 
 **3.0** (auto-creation idempotency) **closed 2026-09-08, superseded 2026-09-14** — our idempotency key and migration are replaced by `alter-x-4-`'s equivalent, which also fixes the tier. The 2026-09-08 verification stands as a record of what was proven; the code it proved is no longer the code that ships.
 
-**Phase 2 code imported 2026-09-14, phase NOT closed.** 2.1, 2.2 and 2.3 arrive from
+**Phase 2: 2.1, 2.2 and 2.3 now demonstrated here (2.4a, PR #10). 2.4b is what remains.**
+(Superseded note follows.) **Phase 2 code imported 2026-09-14, phase NOT closed.** 2.1, 2.2 and 2.3 arrive from
 `alter-x-4-` in PR #9. **2.4 is open and is now the whole of the phase**: nobody has watched
 one deliberately failed run produce a recovery, a memory record and a drift score readable by
 its tenant — not here, and not there. Standing rule 3 applies with full force: this code was
