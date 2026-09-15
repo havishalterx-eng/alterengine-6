@@ -531,6 +531,15 @@ demo.
       the fourteen dependency ports and every connection URL; application service ports stayed
       literal. So the health check probes defaults, and on a machine with sibling checkouts the
       defaults belong to someone else. Same footgun, one layer up.
+- [ ] **C27 [+] six engine apps cannot run their tests locally at all.** `vitest run` against
+      `orchestration-service` specs returns **zero output** and holds a core at 98-100% CPU
+      until killed — three times, including on two pure unit specs. `orchestration-service`,
+      `intelligence-service`, `model-gateway`, `tool-gateway`, `sandbox-service` and
+      `provisioning-service` have **no `vitest.config.ts`**, while seven other projects do, so
+      their specs run under root defaults with nothing bounding discovery. CI passes in ~10
+      minutes, so this is invisible from outside. **It blocks every task whose artefact is a
+      test, and it blocked 2.4a.** Pairs naturally with C25 — both are "the tooling config
+      nobody looked at".
 - [ ] **C25 no root `eslint.config` file exists anywhere in the repo**, despite `lint` being a
       real, invoked target. Found while tracing a dependency-scan advisory to `@nx/eslint`; not
       investigated further — surfaced for someone to look at.

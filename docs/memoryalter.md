@@ -1078,6 +1078,34 @@ Havish, none on engineering.
   nothing in the output pointing at why.
 - **When.** 2026-09-14.
 
+### Six apps have a test target and no vitest config, and locally that means no tests at all
+
+- **What.** On a fresh clone, `vitest run` against `orchestration-service` specs produces
+  **zero bytes of output** and pins a core at 98-100% CPU indefinitely. Observed three times:
+  once with a directory argument, once with three explicit spec paths, once with two pure unit
+  specs and no reporter flag. Killed at 27, 14 and 14 minutes. The tests did not fail — **they
+  never ran.**
+- **The asymmetry underneath it.** `audit-service`, `cost-ledger-service`, `platform-api`,
+  `platform-web`, `adapters`, `observability` and `shared-clients` each have a
+  `vitest.config.ts`. **`orchestration-service`, `intelligence-service`, `model-gateway`,
+  `tool-gateway`, `sandbox-service` and `provisioning-service` have none**, so their specs run
+  under root defaults with no `include`, no `exclude` and no root config file to supply either.
+  Stated as the most likely cause, not as an established one: the discovery walk is unbounded.
+- **Why it matters more than the hour it cost.** CI runs these suites in about ten minutes, so
+  the repository looks healthy from the outside while **nobody can run a single unit test of
+  six engine apps on their own machine.** That is the same shape as the finding that started
+  this project — components went unassessed because the local stack could not be started —
+  and it blocks every task whose artefact is a test, which is most of them. It blocked 2.4a.
+- **A separate, real bug found on the way.** `--reporter=basic` no longer exists in vitest 4.
+  Outside the repo it fails in half a second; inside, resolving the missing reporter through
+  the monorepo's module graph is itself one of the hangs. Not used anywhere in the repository,
+  so this cost only my own time — but it is worth knowing before someone copies it into a
+  script.
+- **How found.** Attempting task 2.4a. Three invocations, then a control run outside the repo
+  that proved vitest itself is healthy.
+- **When.** 2026-09-15.
+- **Where.** `apps/*/vitest.config.ts`, and the six `project.json` test targets without one.
+
 ---
 
 ## 6. Component ledger
