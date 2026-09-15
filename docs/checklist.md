@@ -239,7 +239,23 @@ cannot heal itself.
       with its own migration (alter-x-4- #142). Original scope: — small, real. `drift_read` admits only model and provider
       subjects, so agent drift scores compute, persist, and return zero rows to their own
       tenant. Add the agent subject.
-- [ ] **2.4 prove the cycle — STILL OPEN, and it is now the whole of Phase 2.** Real
+- [ ] **2.4a [+] the healing loop, everything provable locally.** *Prompt ready
+      [`prompts/revive-24a-healing-loop-local.md`](prompts/revive-24a-healing-loop-local.md)
+      — needs Docker, does NOT need AWS.* Four of the six steps need no model provider: a
+      real named failure reaching Recovery, classification and strategy selection, replan
+      from the persisted task skeleton, and a drift score written and read back as the
+      owning tenant. **Split out 2026-09-15** after a sandboxed builder hit the original
+      prompt's gate: its Docker socket was denied and its AWS route was dead, and a partial
+      live run nobody scoped in advance is how a phase gets closed on evidence that does not
+      cover it.
+- [ ] **2.4b [+] the two steps that need a real provider.** *Prompt ready
+      [`prompts/revive-24b-healing-loop-real-provider.md`](prompts/revive-24b-healing-loop-real-provider.md)
+      — needs Docker AND Bedrock in `ap-south-1`.* A genuine model-output failure classified
+      as `logic_output_failure`, and **a drift score changing the next selection**. The
+      second is the one most likely to be incomplete: selection now ranks on containment,
+      similarity, performance and efficiency (PR #9), and whether a drift score reaches that
+      ranking at all is an open question. Phase 2 does not close until this does.
+- [ ] **2.4 prove the cycle — SPLIT 2026-09-15 into 2.4a and 2.4b above.** Real
       failing nodes were run against Recovery on alter-x-4- and reclassified correctly
       (#150, #151, #166), but **nobody has watched the full circuit** — recovery, memory
       write-back, and a drift score that changes the next selection — and nobody has watched
