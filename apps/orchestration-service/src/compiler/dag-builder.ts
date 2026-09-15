@@ -118,7 +118,7 @@ function configWithoutUiMetadata(config: Record<string, unknown>): Record<string
 // Conditional edge helpers (Gate / branch nodes)
 // ---------------------------------------------------------------------------
 
-function extractGateConditions(
+export function extractGateConditions(
   gateKey: string,
   config: Record<string, unknown>,
 ): Record<string, string> {
@@ -143,7 +143,7 @@ function extractGateConditions(
   return conditions;
 }
 
-function validateGateConditionCoverage(
+export function validateGateConditionCoverage(
   gateKey: string,
   conditions: Record<string, string>,
   successors: Set<string>,
