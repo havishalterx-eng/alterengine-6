@@ -1103,6 +1103,20 @@ Havish, none on engineering.
   script.
 - **How found.** Attempting task 2.4a. Three invocations, then a control run outside the repo
   that proved vitest itself is healthy.
+- **What the obvious fix did NOT do, tried 2026-09-15.** Adding a scoped
+  `apps/orchestration-service/vitest.config.ts` with an explicit
+  `include: ["apps/orchestration-service/src/**/*.spec.ts"]` **changed nothing** — same zero
+  output, same 100% CPU, killed at 13:30. So the missing config is real and is not the cause.
+- **What the cause actually is, from a stack sample of the spinning process.** The whole
+  2,240-sample call graph sits under `node::fs::AfterStat`, feeding `Builtins_SetPrototypeAdd`
+  and `String::ComputeAndSetRawHash`. **It is a filesystem stat walk accumulating paths into a
+  Set**, not compilation, not type-checking, not a test hanging. Something is enumerating a
+  directory tree that does not end.
+- **Remaining suspects, none verified.** `node_modules/.pnpm`'s symlink farm being followed;
+  a symlink cycle under the workspace; vite's dependency scan running before `include` is
+  applied. Worth ruling out first: run the same spec from a clone **outside `/private/tmp`**,
+  since every attempt so far was in a scratch path nested eleven directories deep alongside a
+  second clone.
 - **When.** 2026-09-15.
 - **Where.** `apps/*/vitest.config.ts`, and the six `project.json` test targets without one.
 
