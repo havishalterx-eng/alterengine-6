@@ -1120,6 +1120,31 @@ Havish, none on engineering.
 - **When.** 2026-09-15.
 - **Where.** `apps/*/vitest.config.ts`, and the six `project.json` test targets without one.
 
+### C27 was my clone location, not the repository — correction to the two entries above
+
+- **What.** The same single spec, same command, same Node 22, same vitest 4.1.11, run from
+  `~/alter-work/c27` instead of the session scratchpad: **17 tests passed in 141ms, whole run
+  1.97s.** From `/private/tmp/claude-501/<session>/scratchpad/t24/repo` the identical command
+  never terminates. The repository is fine. **Six apps missing a `vitest.config.ts` is still a
+  real gap, and it is not the cause of anything.**
+- **Why the earlier entries were wrong, and they stay.** This file is append-only, so the two
+  C27 entries above remain as written. Both concluded "nobody can run these tests locally"
+  from three runs that all shared one uncontrolled variable: a scratch path eleven directories
+  deep with a second clone of the same repository beside it, plus this session's task-output
+  files. The stack sample was read correctly — it *is* an unbounded filesystem walk — and then
+  attributed to the wrong tree.
+- **The mechanism of the mistake, which is the reusable part.** Three runs, three different
+  invocations, one constant nobody questioned. Varying the thing under suspicion while holding
+  the environment fixed is how it looked rigorous; the environment *was* the variable. This is
+  the same error as quoting a capability-similarity number measured on an isolated pair and
+  calling the threshold sound — **a controlled experiment that controls the wrong thing.**
+- **The rule that should have fired earlier.** `CLAUDE.md` already says never clone into a
+  cloud-synced folder because the sync client makes git hang unpredictably, and names
+  `~/alter-work/` as the convention. The convention existed, with a stated reason about
+  unusual filesystem behaviour, and I cloned somewhere else and spent an hour on the result.
+- **When.** 2026-09-15.
+- **Where.** Clone location, not code.
+
 ---
 
 ## 6. Component ledger

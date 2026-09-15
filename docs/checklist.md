@@ -531,7 +531,13 @@ demo.
       the fourteen dependency ports and every connection URL; application service ports stayed
       literal. So the health check probes defaults, and on a machine with sibling checkouts the
       defaults belong to someone else. Same footgun, one layer up.
-- [ ] **C27 [+] six engine apps cannot run their tests locally at all.** `vitest run` against
+- [x] **C27 [+] NOT A DEFECT — it was the clone location. CLOSED 2026-09-15.** The same spec
+      runs in 141ms from `~/alter-work/`, and never terminates from a scratch path under
+      `/private/tmp` with a second clone beside it. `CLAUDE.md` already names `~/alter-work/`
+      as the convention. **What survives as a real but minor gap:** `orchestration-service`,
+      `intelligence-service`, `model-gateway`, `tool-gateway`, `sandbox-service` and
+      `provisioning-service` have no `vitest.config.ts` while seven other projects do. Worth
+      adding for consistency; it causes nothing. Original, incorrect diagnosis: `vitest run` against
       `orchestration-service` specs returns **zero output** and holds a core at 98-100% CPU
       until killed — three times, including on two pure unit specs. `orchestration-service`,
       `intelligence-service`, `model-gateway`, `tool-gateway`, `sandbox-service` and
