@@ -1178,6 +1178,39 @@ Havish, none on engineering.
 - **Where.** `apps/intelligence-service/src/selection_binding/engine.py` (ranked query),
   `apps/memory-service/src/drift/`, `drift_scores`.
 
+### Prose is accepted as a valid node result, so an off-contract answer never fails
+
+- **What.** `AwsBedrockModelProvider.invoke` always wraps the model's text as
+  `{message: {role, content}, stop_reason}`, and `ModelGatewayService` passes that wrapper
+  through untouched as `output_json` (`model-gateway.service.ts:270`). **So `output_json` is a
+  valid JSON object whatever the model said.** `#validateOutputShape` cannot fire, and
+  `LLMTaskHandler`'s and `SynthesisHandler`'s own `JSON.parse(output_json)` cannot fail either.
+- **Why this is worse than a rare failure.** It is not that the textbook case is hard to
+  reproduce. It is that **nothing checks that `message.content` matched the task's contract.**
+  A model that answers a different question entirely produces a structurally perfect node
+  output, and the run continues. `MODEL_OUTPUT_INVALID` is unreachable from the Bedrock path,
+  so an off-contract answer still falls through to the unclassified default and is dispatched
+  as `ask_user` — exactly what #149 and #151 set out to stop.
+- **What is genuinely fine.** The downstream half works. Given the code, `classifyNodeFailure`
+  scores it `logic_output_failure` and the strategy table routes a repeat attempt to `replan`,
+  which 2.4a proved replans from the persisted skeleton. **The producer is missing, not the
+  consumer.**
+- **Where #151's live evidence came from, and why it does not contradict this.** That run
+  recorded `output_json is not valid JSON: Unexpected token 'T', "The articl"...`, which
+  requires `output_json` to have been raw text rather than the wrapper. Some provider path
+  does not wrap. Which one is **not established here** — the Bedrock adapter demonstrably
+  does wrap, and that is the path Phase 1 wired as the real provider.
+- **How found.** Attempting 2.4b step 5 with a real Bedrock call, and having the first
+  assertion fail because the prose parsed. Reading the adapter rather than assuming the
+  assertion was wrong.
+- **Proven, not argued.** The live spec asks the same model for prose and shows the wrapper
+  valid and its content unparseable; asking that model for JSON instead makes the assertion
+  fail, so it discriminates.
+- **When.** 2026-09-16.
+- **Where.** `packages/adapters/src/aws/bedrock-model-provider.ts:88-110`,
+  `apps/model-gateway/src/gateway/model-gateway.service.ts:270,494-512`,
+  `apps/orchestration-service/src/registry/handlers/llmtask.handler.ts:112-125`.
+
 ---
 
 ## 6. Component ledger

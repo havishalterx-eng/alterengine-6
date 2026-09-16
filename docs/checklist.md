@@ -259,7 +259,12 @@ cannot heal itself.
       prompt's gate: its Docker socket was denied and its AWS route was dead, and a partial
       live run nobody scoped in advance is how a phase gets closed on evidence that does not
       cover it.
-- [!] **2.4b [+] BLOCKED on a missing mechanism, not on a provider. Found 2026-09-15.** Step 6
+- [!] **2.4b [+] BOTH its steps are findings, not demonstrations. 2026-09-15/16.** **Step 5
+      done** — driven live against Bedrock, and it found **C29**: the adapter wraps every
+      response so `output_json` always parses, `MODEL_OUTPUT_INVALID` is unreachable, and
+      off-contract prose is accepted as a valid node result. **Step 6 blocked** — see below;
+      nothing reads a drift score. Neither step is a test waiting to be written. Original
+      finding on step 6: Step 6
       — a drift score changing the next selection — **cannot be demonstrated, because nothing
       reads a drift score.** Selection ranks on `performance_records` in intelligence-service's
       database; `drift_scores` lives in memory-service's and is read only by memory-service and
@@ -565,6 +570,16 @@ demo.
       minutes, so this is invisible from outside. **It blocks every task whose artefact is a
       test, and it blocked 2.4a.** Pairs naturally with C25 — both are "the tooling config
       nobody looked at".
+- [ ] **C29 [+] nothing validates model output against the task's contract.** The Bedrock
+      adapter wraps every response as `{message, stop_reason}` and the gateway passes it
+      through as `output_json`, so `output_json` always parses and `MODEL_OUTPUT_INVALID` is
+      unreachable on the real-provider path. **Prose, or an answer to a different question
+      entirely, is accepted as a valid node result** and falls through to `ask_user`. The
+      classifier and strategy table are correct — the producer of the code is what is missing.
+      Also unresolved: #151's live evidence shows some path where `output_json` is raw text,
+      and which provider that is has not been established. Found by task 2.4b step 5, live
+      against Bedrock; pinned by
+      `apps/orchestration-service/src/recovery/model-output-failure.live.spec.ts`.
 - [ ] **C28 [+] the Drift Detector's inward path to Policy Store (§17).** Drift scores compute,
       persist, and are readable by their tenant — and nothing consumes them. `DriftAction`
       records `weight_decay` as an intent no code performs. Selection reads routing weights from
