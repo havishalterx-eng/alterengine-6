@@ -1246,6 +1246,35 @@ Havish, none on engineering.
   `apps/memory-service/src/policy_store/service.py:94-160`,
   `apps/intelligence-service/src/selection_binding/policy_client.py`.
 
+### §5.1 exists and is never read; §5.2 is absent. C29's fix is that, not a per-node schema
+
+- **What (closes C12).** `success_criteria` is a real field on `ProblemSpec`, produced by
+  Problem Understanding and validated entry-by-entry as non-empty
+  (`problem_understanding/models.py:49`). **Nothing downstream consumes it.** Outside
+  intelligence-service's own three files, every occurrence in the repository is a test —
+  nothing in orchestration-service or verification-service reads it. §5.2's mechanical
+  read-back has no trace at all.
+- **So §5.1 is half-built**, which is worse than absent for planning purposes: the field's
+  existence makes the capability look present in any source read, and it is §7 pattern 3
+  verbatim — real machinery with nothing driving it, the same shape as `verifyChain()` having
+  no caller.
+- **What this does to C29.** An LLMTask node declares a prompt and a model alias and **no
+  output contract**, so "validate output against the task's contract" had nothing to validate
+  against. The contract is not missing from the system; it is missing from the *path*. Success
+  criteria are decided at the top of the design path and never reach the node that produces
+  output or the gate that judges it. **C29's fix is to carry them down, not to invent a
+  per-node output schema.**
+- **Why the obvious alternative was rejected.** Adding an `output_schema` to LLMTask config is
+  small and additive, and it would create a second place that judges node output beside the
+  Verification & Quality Gate — §7's duplicated-primitives pattern arriving by the front door,
+  and permanently, because that gate is Category 1 and frozen.
+- **Size, stated honestly.** This is a subsystem: producing criteria per node, carrying them
+  through compilation into the run, and having the verification path read them. It is not a
+  patch, and C12's own entry predicted exactly that.
+- **When.** 2026-09-16.
+- **Where.** `apps/intelligence-service/src/problem_understanding/models.py:49`,
+  `apps/orchestration-service/src/registry/handlers/llmtask.handler.ts`.
+
 ---
 
 ## 6. Component ledger

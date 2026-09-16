@@ -586,7 +586,13 @@ demo.
       minutes, so this is invisible from outside. **It blocks every task whose artefact is a
       test, and it blocked 2.4a.** Pairs naturally with C25 — both are "the tooling config
       nobody looked at".
-- [ ] **C29 [+] nothing validates model output against the task's contract.** The Bedrock
+- [ ] **C29 [+] nothing validates model output against the task's contract. SCOPED 2026-09-16,
+      and it is the same work as C12.** The contract is not missing from the system, it is
+      missing from the *path*: `success_criteria` is decided at the top of the design path and
+      never reaches the node that produces output or the gate that judges it. **Fix is to carry
+      them down, not to add a per-node `output_schema`** — that would put a second judge of node
+      output beside the frozen Verification & Quality Gate (§7 pattern 4). Needs a decision on
+      scope before any build. Original finding: The Bedrock
       adapter wraps every response as `{message, stop_reason}` and the gateway passes it
       through as `output_json`, so `output_json` always parses and `MODEL_OUTPUT_INVALID` is
       unreachable on the real-provider path. **Prose, or an answer to a different question
@@ -691,7 +697,11 @@ demo.
       residual. A stored map plus fresh run-time resolution is §7 pattern 4. Either run-time
       consumers read the column, or it is deleted. Touches the frozen Executor, so **after
       revival**, not during.
-- [ ] **C12 verify §5.1 and §5.2 exist at all** — structured success criteria and mechanical
+- [x] **C12 ANSWERED 2026-09-16 — §5.1 is half-built, §5.2 is absent.** `success_criteria` is
+      produced and validated on `ProblemSpec` and **read by nothing**; every other occurrence in
+      the repository is a test. §5.2's mechanical read-back has no trace. Half-built is worse
+      than absent here: the field makes the capability look present in a source read. **It is a
+      subsystem, as this item predicted**, and it is the same work as C29. Original scope: — structured success criteria and mechanical
       read-back. **Absence is currently inferred, not established.** Check before scheduling;
       if genuinely missing this is a subsystem, not a patch.
 
