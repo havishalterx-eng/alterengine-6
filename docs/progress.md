@@ -49,6 +49,9 @@ Format: `YYYY-MM-DD · task · what was demonstrated · who verified`
 - `2026-09-15 · 2.4a · full recovery suite run on a developer machine for the first time: 9 spec files, 87 tests · verified live`
 - `2026-09-15 · 2.4a · agent drift computed, persisted and read back as the owning tenant · verified by memory-service test_drift_integration.py against real Postgres, 2 tests`
 - `2026-09-15 · C27 · withdrawn: the local test hang was the clone location, not the repository. Same spec runs in 141ms from ~/alter-work · verified by re-running the identical command from both places`
+- `2026-09-16 · 2.4b step 5 · real Bedrock prose arrives wrapped in valid JSON, so no coded failure is produced and off-contract output is accepted as a valid node result (C29) · verified live, proven to discriminate, merged PR #11`
+- `2026-09-16 · 2.4b step 6 · the full drift-to-ranking chain composed and run on one machine: significant drift decays the tenant routing policy 0.8 to 0.0, and an active routing policy changes which agent the ranked query returns · verified live, both halves by existing tests`
+- `2026-09-16 · C28 · withdrawn: drift DOES change the next selection. The original finding grepped for readers of drift_scores and missed the detector's own call to apply_drift_decay · corrected in memoryalter`
 
 ---
 

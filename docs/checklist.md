@@ -259,7 +259,19 @@ cannot heal itself.
       prompt's gate: its Docker socket was denied and its AWS route was dead, and a partial
       live run nobody scoped in advance is how a phase gets closed on evidence that does not
       cover it.
-- [~] **2.4b [+] step 5 done and step 6 unblocked. 2026-09-15/16.** **Step 5 closed** — driven
+- [x] **2.4b [+] BOTH STEPS DONE 2026-09-16.** **Step 5** driven live against Bedrock (PR #11),
+      finding **C29**: the adapter wraps every response so `output_json` always parses and
+      off-contract prose is accepted as a valid node result. **Step 6 demonstrated by existing
+      coverage, run here today and composed for the first time:** memory-service's
+      `test_real_performance_http_projection_computes_and_persists_drift` shows significant
+      drift producing `action_taken == "weight_decay"` and the active routing policy's
+      `similarity_weight` falling 0.8 to 0.0; intelligence-service's
+      `test_active_routing_policy_changes_the_next_ranked_selection` shows an active routing
+      policy changing which agent the ranked query returns (2 passed, 5.21s). **No new code was
+      needed** — the chain was built and tested, and nobody had run both halves on one machine.
+      **Caveat, and it is the gate's wording rather than the engine's behaviour:** the decay is
+      tenant-wide and lowers `similarity_weight` only, so it shifts how candidates are weighed
+      rather than penalising the drifted agent. Superseded note: **Step 5 closed** — driven
       live against Bedrock, and it found **C29**: the adapter wraps every response so
       `output_json` always parses and off-contract prose is accepted as a valid node result.
       **Step 6 is demonstrable after all** — C28 was withdrawn; the drift-to-policy-to-ranking
