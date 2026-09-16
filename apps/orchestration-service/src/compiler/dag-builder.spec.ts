@@ -109,6 +109,28 @@ describe("compileTaskSkeletonToDag", () => {
     expect(dag.schema_version).toBe("dag-schema-v3");
   });
 
+  it("carries supplied success criteria onto the matching compiled node", () => {
+    const skeleton = parseTaskSkeleton(JSON.stringify({
+      ...sequentialSkeleton(),
+      nodes: [
+        { ...sequentialSkeleton().nodes[0], success_criteria: ["Plan is ready for review."] },
+        ...sequentialSkeleton().nodes.slice(1),
+      ],
+    }));
+
+    const dag = compileTaskSkeletonToDag(skeleton, "v1");
+
+    expect(dag.nodes.find((node) => node.key === "node_a")?.success_criteria).toEqual([
+      "Plan is ready for review.",
+    ]);
+  });
+
+  it("compiles legacy skeletons without success criteria", () => {
+    const dag = compileTaskSkeletonToDag(sequentialSkeleton(), "v1");
+
+    expect(dag.nodes.every((node) => node.success_criteria === undefined)).toBe(true);
+  });
+
   it("preserves canonical ToolCall credential_ref into compiled config", () => {
     const skeleton = sequentialSkeleton();
     skeleton.nodes[1] = {

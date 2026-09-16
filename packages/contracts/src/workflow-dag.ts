@@ -108,6 +108,7 @@ const WorkflowDagNodeSchema = z
     key: NodeKeySchema,
     type: NodeTypeSchema,
     config: z.record(z.string(), z.unknown()),
+    success_criteria: z.array(NonEmptyStringSchema).min(1).optional(),
     metadata: z
       .object({
         ui: z.record(z.string(), z.unknown()),

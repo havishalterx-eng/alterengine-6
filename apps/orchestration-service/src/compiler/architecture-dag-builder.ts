@@ -21,6 +21,7 @@ const ArchitectureNode = z.object({
   // produced before synthesis carried it still compiles -- into exactly the
   // configuration-free DAG it produced before.
   config: z.record(z.string(), z.unknown()).optional(),
+  success_criteria: z.array(z.string().trim().min(1)).min(1).nullable().optional(),
 }).strict();
 const ArchitectureSpec = z.object({
   status: z.literal("ready"),
@@ -94,7 +95,15 @@ export function compileArchitectureToDag(raw: ArchitectureCompileInput): Compile
     // top -- binding metadata is chosen here and must win over anything a
     // skeleton happened to carry under the same keys.
     const bindingConfig = binding === undefined ? {} : { capability_record_id: binding.record_id, capability_version: binding.version };
-    return { key: node.source_node_key, type: nodeType(node, binding), config: { ...(node.config ?? {}), ...bindingConfig }, metadata: { ui: {} } };
+    return {
+      key: node.source_node_key,
+      type: nodeType(node, binding),
+      config: { ...(node.config ?? {}), ...bindingConfig },
+      ...(node.success_criteria === undefined || node.success_criteria === null
+        ? {}
+        : { success_criteria: node.success_criteria }),
+      metadata: { ui: {} },
+    };
   });
   const edges: CompiledDag["edges"] = architecture.nodes.flatMap((node) => node.depends_on.map((from) => ({ key: `${from}-to-${node.source_node_key}`, from, to: node.source_node_key, kind: "sequential" as const })));
   for (const boundary of architecture.boundaries) {

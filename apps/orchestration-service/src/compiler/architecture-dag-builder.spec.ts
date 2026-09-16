@@ -52,6 +52,17 @@ describe("compileArchitectureToDag", () => {
     });
   });
 
+  it("carries supplied success criteria onto its compiled node", () => {
+    const value = input();
+    value.architecture.nodes[0]!.success_criteria = ["Plan is ready for review."];
+
+    const dag = compileArchitectureToDag(value);
+
+    expect(dag.nodes.find((node) => node.key === "plan")?.success_criteria).toEqual([
+      "Plan is ready for review.",
+    ]);
+  });
+
   it("lets binding identifiers win over a colliding skeleton key", () => {
     const value = input();
     value.architecture.nodes[0]!.config = { capability_record_id: "from-skeleton" };

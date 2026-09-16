@@ -26,6 +26,7 @@ const TaskSkeletonNodeSchema = z
     type: z.enum(["llm", "tool", "branch", "join"]),
     config: z.record(z.string(), z.unknown()),
     depends_on: z.array(z.string()),
+    success_criteria: z.array(z.string().trim().min(1)).min(1).optional(),
   })
   .strict();
 
@@ -238,6 +239,7 @@ export function compileTaskSkeletonToDag(
     key: node.key,
     type: NODE_TYPE_MAP[node.type],
     config: configWithoutUiMetadata(node.config),
+    ...(node.success_criteria === undefined ? {} : { success_criteria: node.success_criteria }),
     metadata: { ui: extractUiMetadata(node.key, node.config) },
   }));
 

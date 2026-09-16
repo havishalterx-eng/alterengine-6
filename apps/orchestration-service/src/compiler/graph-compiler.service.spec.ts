@@ -141,6 +141,20 @@ describe("GraphCompilerService.compileWorkflow", () => {
     );
   });
 
+  it("persists per-node success criteria in the compiled version", async () => {
+    const { store, rows } = createFakeStore();
+    const service = new GraphCompilerService(store);
+    const skeleton = JSON.parse(skeletonJson());
+    skeleton.nodes[0].success_criteria = ["Plan is ready for review."];
+
+    await service.compileWorkflow(compileRequest({ task_skeleton_json: JSON.stringify(skeleton) }));
+
+    const dag = JSON.parse(rows[0]!.compiled_dag);
+    expect(dag.nodes.find((node: { key: string }) => node.key === "node_a").success_criteria).toEqual([
+      "Plan is ready for review.",
+    ]);
+  });
+
   it("returns a wfv_ prefixed workflow_version_id", async () => {
     const { store } = createFakeStore();
     const service = new GraphCompilerService(store);
@@ -161,6 +175,7 @@ describe("GraphCompilerService.compileWorkflow", () => {
 
     expect(dag.entry_node_keys).toEqual(["node_a"]);
     expect(dag.nodes).toHaveLength(3);
+    expect(dag.nodes.every((node: { success_criteria?: string[] }) => node.success_criteria === undefined)).toBe(true);
   });
 
   it("increments version on a second compile of the same workflow", async () => {

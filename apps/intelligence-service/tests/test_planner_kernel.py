@@ -78,6 +78,19 @@ class TestDecompose:
         assert skeleton.version == "1"
         assert len(skeleton.nodes) >= 1
         assert skeleton.entry_point
+        assert all(node.success_criteria is None for node in skeleton.nodes)
+
+    async def test_carries_problem_spec_success_criteria_to_every_node(self) -> None:
+        criteria = ["Customer feedback is grouped by theme."]
+        response = await _kernel().decompose(_decompose_req(
+            problem_spec_json=problem_spec_json(ProblemSpec(
+                objective="summarise customer feedback",
+                success_criteria=criteria,
+            ))
+        ))
+
+        skeleton = TaskSkeleton.from_json(response.task_skeleton_json)
+        assert all(node.success_criteria == criteria for node in skeleton.nodes)
 
     async def test_ambiguity_false_for_short_objective_with_no_kb(self) -> None:
         kernel = _kernel()

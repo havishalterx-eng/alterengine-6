@@ -75,6 +75,15 @@ class PlannerKernel:
                 problem_spec_json=request.problem_spec_json,
             )
 
+        criteria = list(problem_spec.success_criteria)
+        if criteria:
+            skeleton = skeleton.model_copy(update={
+                "nodes": [
+                    node.model_copy(update={"success_criteria": list(criteria)})
+                    for node in skeleton.nodes
+                ]
+            })
+
         # Problem Understanding owns ambiguity evidence; Planner does not
         # re-query ADS or infer ambiguity from raw conversational text.
         clarification_questions: list[str] = []

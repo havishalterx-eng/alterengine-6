@@ -64,6 +64,7 @@ class ArchitectureNode(StrictModel):
     # node on a missing prompt. Defaults to empty, so an architecture produced
     # before this field existed still validates.
     config: dict[str, object] = Field(default_factory=dict)
+    success_criteria: list[NonEmpty] | None = None
 
 
 class ExecutionWave(StrictModel):

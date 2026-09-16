@@ -17,7 +17,7 @@ const migrationsFolder = resolve(process.cwd(), "apps/orchestration-service/driz
 function request(): ArchitectureCompileInput {
   return {
     tenant_id: TENANT, workspace_id: WORKSPACE, workflow_id: WORKFLOW, dag_schema_version: "v1",
-    architecture: { status: "ready", version: "1", topology: "single", boundaries: [{ kind: "verification", after_node_key: "work", reason: "required" }], nodes: [{ source_node_key: "work", role: "direct", execution_kind: "llm", depends_on: [], capability_role: { source_node_key: "work", required_capabilities: ["text"], eligible_kinds: ["model"] } }], execution_waves: [{ order: 0, node_keys: ["work"], depends_on_wave_orders: [] }] },
+    architecture: { status: "ready", version: "1", topology: "single", boundaries: [{ kind: "verification", after_node_key: "work", reason: "required" }], nodes: [{ source_node_key: "work", role: "direct", execution_kind: "llm", depends_on: [], capability_role: { source_node_key: "work", required_capabilities: ["text"], eligible_kinds: ["model"] }, success_criteria: ["Work is ready for review."] }], execution_waves: [{ order: 0, node_keys: ["work"], depends_on_wave_orders: [] }] },
     binding_decision: { status: "ready", bindings: [{ record_id: "model-pinned", version: 7, kind: "model", source_node_key: "work", rationale: "approved", score: 1, factors: { reliability: 1 } }] },
   };
 }
@@ -40,7 +40,10 @@ describe.sequential("architecture graph compiler Postgres integration", () => {
     const result = await compiler.compileArchitectureWorkflow({ ...input, architecture_json: JSON.stringify(input.architecture), binding_decision_json: JSON.stringify(input.binding_decision) });
     const dag = JSON.parse(result.compiled_dag_json);
     expect(dag.nodes.find((node: { key: string }) => node.key === "work").config).toMatchObject({ capability_record_id: "model-pinned", capability_version: 7 });
-    await expect(store.withTenant(BARE_TENANT, (tx) => tx.query("SELECT id FROM workflow_versions WHERE id = $1", [result.workflow_version_id]))).resolves.toMatchObject({ rowCount: 1 });
+    const persisted = await store.withTenant(BARE_TENANT, (tx) => tx.query<{
+      compiled_dag: { nodes: Array<{ key: string; success_criteria?: string[] }> };
+    }>("SELECT compiled_dag FROM workflow_versions WHERE id = $1", [result.workflow_version_id]));
+    expect(persisted.rows[0]!.compiled_dag.nodes.find((node) => node.key === "work")?.success_criteria).toEqual(["Work is ready for review."]);
   });
 
   it("rejects a workflow compiled under another workspace", async () => {

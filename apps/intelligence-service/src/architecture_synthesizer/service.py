@@ -61,6 +61,9 @@ class ArchitectureSynthesizer:
                 depends_on=sorted(node.depends_on),
                 capability_role=eligible_roles.get(node.key),
                 config=dict(node.config),
+                success_criteria=(
+                    list(node.success_criteria) if node.success_criteria is not None else None
+                ),
             )
             for node in nodes
         ]
