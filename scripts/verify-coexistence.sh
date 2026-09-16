@@ -40,6 +40,24 @@ export TEMPO_OTLP_HTTP_PORT=14318
 export GRAFANA_PORT=13300
 export PRESIDIO_ANALYZER_PORT=15001
 export PRESIDIO_ANONYMIZER_PORT=15002
+# Application processes run outside compose. Give every HTTP listener its own
+# offset so their health probes cannot accidentally reach a sibling checkout.
+export AUDIT_PORT=13021
+export ADS_CORE_PORT=18010
+export COST_PORT=13022
+export ORCHESTRATION_PORT=13010
+export BACKGROUND_WORKERS_PORT=13011
+export MODEL_GATEWAY_PORT=13023
+export TOOL_GATEWAY_PORT=13024
+export SANDBOX_SERVICE_PORT=13025
+export PROVISIONING_SERVICE_PORT=13026
+export PLATFORM_API_PORT=13020
+export INTELLIGENCE_SERVICE_PORT=18000
+export VERIFICATION_SERVICE_PORT=18001
+export MEMORY_SERVICE_PORT=18002
+export EVAL_SERVICE_PORT=18003
+export PLATFORM_WEB_PORT=15173
+export MOCK_AUTH0_PORT=14999
 
 echo "== Sibling stacks BEFORE (must be up and untouched) =="
 docker ps --format '{{.Names}}\t{{.Ports}}' | grep -Ei 'alter-x-4-|alterengine--5|alterengine-5' || echo "(no sibling containers visible by name; verify with your own ps)"
@@ -61,6 +79,10 @@ export PLATFORM_DB_PORT ENGINE_DB_PORT ADS_DB_PORT COST_DB_PORT REDIS_PORT
 export LOCALSTACK_PORT TEMPORAL_PORT TEMPORAL_UI_PORT TEMPO_PORT
 export TEMPO_OTLP_GRPC_PORT TEMPO_OTLP_HTTP_PORT GRAFANA_PORT
 export PRESIDIO_ANALYZER_PORT PRESIDIO_ANONYMIZER_PORT
+export AUDIT_PORT ADS_CORE_PORT COST_PORT ORCHESTRATION_PORT BACKGROUND_WORKERS_PORT
+export MODEL_GATEWAY_PORT TOOL_GATEWAY_PORT SANDBOX_SERVICE_PORT PROVISIONING_SERVICE_PORT
+export PLATFORM_API_PORT INTELLIGENCE_SERVICE_PORT VERIFICATION_SERVICE_PORT MEMORY_SERVICE_PORT
+export EVAL_SERVICE_PORT PLATFORM_WEB_PORT MOCK_AUTH0_PORT
 
 docker compose --env-file .env.local up -d --build --wait \
   engine-db ads-db cost-db redis localstack temporal tempo grafana \
