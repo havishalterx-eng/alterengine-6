@@ -26,8 +26,10 @@ import { EstimationService, EstimationValidationError } from "./estimation.servi
 
 const migrationsFolder = resolve(process.cwd(), "apps/cost-ledger-service/drizzle");
 
-const TENANT_A = "018f4d6e-2b4a-7a3e-8c1a-1234567890a1";
-const TENANT_B = "018f4d6e-2b4a-7a3e-8c1a-1234567890b1";
+const TENANT_A_BARE = "018f4d6e-2b4a-7a3e-8c1a-1234567890a1";
+const TENANT_B_BARE = "018f4d6e-2b4a-7a3e-8c1a-1234567890b1";
+const TENANT_A = `ten_${TENANT_A_BARE}`;
+const TENANT_B = `ten_${TENANT_B_BARE}`;
 
 async function seedCostEvent(
   store: PostgresCostStoreProvider,
@@ -49,12 +51,12 @@ async function seedCostEvent(
     internalCostMinor = 500,
     isRetry = false,
   } = overrides;
-  await store.withTenant(tenantId, async (tx) => {
+  await store.withTenant(tenantId.replace(/^ten_/, ""), async (tx) => {
     await tx.query(
       `INSERT INTO cost_events
         (id, tenant_id, workspace_id, mode, source, provider, resource, quantity, unit, internal_cost_minor, is_retry, occurred_at)
        VALUES (gen_random_uuid(), $1, gen_random_uuid(), 'workflow', $2, $3, $4, $5, 'tokens', $6, $7, now())`,
-      [tenantId, source, provider, resource, quantity, internalCostMinor, isRetry],
+      [tenantId.replace(/^ten_/, ""), source, provider, resource, quantity, internalCostMinor, isRetry],
     );
   });
 }
@@ -99,7 +101,7 @@ describe.sequential("EstimationService", () => {
 
     // Real, non-superuser role -- same shape a real deployed app connection
     // has, and the only way RLS is actually exercised (see comment above).
-    await adminStore.withTenant(TENANT_A, async (tx) => {
+    await adminStore.withTenant(TENANT_A_BARE, async (tx) => {
       await tx.query(`CREATE ROLE ${role} LOGIN PASSWORD '${password}'`);
       await tx.query(`GRANT CONNECT ON DATABASE cost_db TO ${role}`);
       await tx.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
@@ -119,7 +121,7 @@ describe.sequential("EstimationService", () => {
 
   afterAll(async () => {
     await scopedStore?.close();
-    await adminStore.withTenant(TENANT_A, async (tx) => {
+    await adminStore.withTenant(TENANT_A_BARE, async (tx) => {
       await tx.query(`DROP OWNED BY ${role}`);
       await tx.query(`DROP ROLE IF EXISTS ${role}`);
     });
@@ -128,7 +130,7 @@ describe.sequential("EstimationService", () => {
   }, 60_000);
 
   beforeEach(async () => {
-    for (const tenantId of [TENANT_A, TENANT_B]) {
+    for (const tenantId of [TENANT_A_BARE, TENANT_B_BARE]) {
       await adminStore.withTenant(tenantId, async (tx) => {
         await tx.query("DELETE FROM cost_events WHERE tenant_id = $1", [tenantId]);
       });
@@ -305,16 +307,16 @@ describe.sequential("EstimationService", () => {
     ).rejects.toThrow("source must be one of model_gateway, tool_gateway, sandbox, storage, browser");
   });
 
-  it("rejects a malformed tenantId", async () => {
+  it("rejects a bare tenantId at the external HTTP contract", async () => {
     await expect(
       service.estimate({
-        tenantId: "not-a-uuid",
+        tenantId: TENANT_A_BARE,
         mode: "workflow",
         lineItems: [
           { source: "sandbox", provider: "e2b", resource: "vm_seconds", expectedQuantity: 1 },
         ],
       }),
-    ).rejects.toThrow(EstimationValidationError);
+    ).rejects.toThrow("tenantId must have prefix ten_");
   });
 
   describe("resolveUnitPrice", () => {

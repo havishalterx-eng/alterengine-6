@@ -43,9 +43,7 @@ export class EstimationService {
   ) {}
 
   async estimate(request: EstimateCostRequest): Promise<EstimateCostResponse> {
-    if (!UUID_PATTERN.test(request.tenantId)) {
-      throw new EstimationValidationError("tenantId must be a UUID");
-    }
+    const tenantId = requirePrefixedTenantUuid(request.tenantId);
     if (request.lineItems.length === 0) {
       throw new EstimationValidationError("lineItems must not be empty");
     }
@@ -67,7 +65,7 @@ export class EstimationService {
     let hasUnestimatedLineItems = false;
 
     for (const item of request.lineItems) {
-      const result = await this.#estimateLineItem(request.tenantId, item);
+      const result = await this.#estimateLineItem(tenantId, item);
       lineItems.push(result);
       total += BigInt(result.estimatedTotalCostMinor);
       if (result.confidence === "no_data") {
@@ -233,4 +231,18 @@ export class EstimationService {
       confidence: "no_data",
     };
   }
+}
+
+function requirePrefixedTenantUuid(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new EstimationValidationError("tenantId is required");
+  }
+  if (!value.startsWith("ten_")) {
+    throw new EstimationValidationError("tenantId must have prefix ten_");
+  }
+  const bare = value.slice("ten_".length);
+  if (!UUID_PATTERN.test(bare)) {
+    throw new EstimationValidationError("tenantId must be a ten_ prefixed UUID");
+  }
+  return bare;
 }
