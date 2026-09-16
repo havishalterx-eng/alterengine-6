@@ -42,7 +42,8 @@ must have this exact shape:
       "key": "<unique_snake_case_id, must start with a letter>",
       "type": "<llm|tool|branch|join>",
       "config": { ... },
-      "depends_on": ["<key of node this depends on>", ...]
+      "depends_on": ["<key of node this depends on>", ...],
+      "success_criteria": ["<exact success criterion assigned to this node>", ...]
     }
   ],
   "entry_point": "<key of the first node, must have depends_on: []>"
@@ -60,7 +61,9 @@ whatever parameters that tool call needs).
 
 Keep the plan small and concrete -- 2 to 6 nodes. Every node's dependencies must reference \
 real node keys in the same skeleton. Exactly one node must have depends_on: [] and must \
-match entry_point."""
+match entry_point. For every string in the input ProblemSpec's success_criteria, assign that \
+exact unchanged string to one or more node success_criteria lists. Do not omit, rewrite, invent, \
+or copy every criterion onto every node."""
 
 
 class ModelGatewayLlmClient(StubLlmClient):

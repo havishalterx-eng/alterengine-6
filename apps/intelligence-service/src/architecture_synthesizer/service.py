@@ -78,6 +78,11 @@ class ArchitectureSynthesizer:
             boundaries=boundaries,
             rationale=rationale,
             confidence=1.0,
+            success_criteria=(
+                list(skeleton.success_criteria)
+                if skeleton.success_criteria is not None
+                else None
+            ),
         )
 
 

@@ -3445,6 +3445,14 @@
                 },
                 "minItems": 1
               },
+              "success_criteria": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1
+              },
               "nodes": {
                 "type": "array",
                 "items": {
@@ -3824,6 +3832,14 @@
                 "items": {
                   "type": "string",
                   "pattern": "^[a-z][a-z0-9._-]{0,127}$/i"
+                },
+                "minItems": 1
+              },
+              "success_criteria": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
                 },
                 "minItems": 1
               },

@@ -35,6 +35,7 @@ const TaskSkeletonSchema = z
     version: z.string(),
     nodes: z.array(TaskSkeletonNodeSchema).min(1),
     entry_point: z.string(),
+    success_criteria: z.array(z.string().trim().min(1)).min(1).optional(),
   })
   .strict();
 
@@ -282,6 +283,9 @@ export function compileTaskSkeletonToDag(
   const dag: CompiledDag = {
     schema_version: dagSchemaVersion,
     entry_node_keys: [skeleton.entry_point],
+    ...(skeleton.success_criteria === undefined
+      ? {}
+      : { success_criteria: skeleton.success_criteria }),
     nodes,
     edges,
     waves,

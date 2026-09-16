@@ -54,6 +54,7 @@ describe("compileArchitectureToDag", () => {
 
   it("carries supplied success criteria onto its compiled node", () => {
     const value = input();
+    value.architecture.success_criteria = ["Workflow is ready for review."];
     value.architecture.nodes[0]!.success_criteria = ["Plan is ready for review."];
 
     const dag = compileArchitectureToDag(value);
@@ -61,6 +62,7 @@ describe("compileArchitectureToDag", () => {
     expect(dag.nodes.find((node) => node.key === "plan")?.success_criteria).toEqual([
       "Plan is ready for review.",
     ]);
+    expect(dag.success_criteria).toEqual(["Workflow is ready for review."]);
   });
 
   it("lets binding identifiers win over a colliding skeleton key", () => {

@@ -207,6 +207,7 @@ export const CompiledDagSchema = z
   .object({
     schema_version: NonEmptyStringSchema,
     entry_node_keys: z.array(NodeKeySchema).min(1),
+    success_criteria: z.array(NonEmptyStringSchema).min(1).optional(),
     nodes: z.array(WorkflowDagNodeSchema).min(1).max(MAX_DAG_NODES),
     edges: z.array(WorkflowDagEdgeSchema).max(MAX_DAG_EDGES),
     waves: z.array(WorkflowDagWaveSchema).min(1),

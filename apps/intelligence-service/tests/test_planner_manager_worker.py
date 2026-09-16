@@ -60,3 +60,29 @@ class TestBuildManagerWorkerSkeleton:
 
         worker_a = next(n for n in skeleton.nodes if n.key == "node_worker_a")
         assert worker_a.config["objective"] == "part A"
+
+    def test_carries_explicit_plan_criterion_assignments(self) -> None:
+        plan = _plan(
+            manager_success_criteria=["Work is coordinated."],
+            workers=[WorkerTaskSpec(
+                key="a",
+                objective="part A",
+                success_criteria=["Part A is complete."],
+            )],
+            join_success_criteria=["Parts are combined."],
+        )
+
+        skeleton = build_manager_worker_skeleton(plan)
+
+        manager = next(node for node in skeleton.nodes if node.key == "node_manager")
+        worker = next(node for node in skeleton.nodes if node.key == "node_worker_a")
+        join = next(node for node in skeleton.nodes if node.key == "node_join")
+        assert manager.success_criteria == [
+            "Work is coordinated."
+        ]
+        assert worker.success_criteria == [
+            "Part A is complete."
+        ]
+        assert join.success_criteria == [
+            "Parts are combined."
+        ]

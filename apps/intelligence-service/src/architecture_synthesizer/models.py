@@ -90,6 +90,7 @@ class ArchitectureSpec(StrictModel):
     boundaries: list[ArchitectureBoundary] = Field(default_factory=list)
     rationale: list[NonEmpty] = Field(min_length=1)
     confidence: float = Field(ge=0, le=1)
+    success_criteria: list[NonEmpty] | None = None
 
 
 class ArchitectureBlocked(StrictModel):

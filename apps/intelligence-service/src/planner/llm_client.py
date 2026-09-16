@@ -9,6 +9,7 @@ Wire the stub during development.  Swap in the real adapter at integration
 time without touching kernel.py.
 """
 
+import json
 from typing import Protocol, runtime_checkable
 
 from .manager_worker import ManagerWorkerPlan, WorkerTaskSpec
@@ -92,7 +93,14 @@ class StubLlmClient:
         strategy: str,
         problem_spec_json: str,
     ) -> TaskSkeleton:
-        return _STUB_SINGLE_NODE_SKELETON
+        criteria = json.loads(problem_spec_json).get("success_criteria", [])
+        return _STUB_SINGLE_NODE_SKELETON.model_copy(update={
+            "nodes": [
+                _STUB_SINGLE_NODE_SKELETON.nodes[0].model_copy(
+                    update={"success_criteria": list(criteria) or None}
+                )
+            ]
+        })
 
     async def revise_skeleton(
         self,
@@ -106,6 +114,7 @@ class StubLlmClient:
             version=current_skeleton.version,
             nodes=current_skeleton.nodes,
             entry_point=current_skeleton.entry_point,
+            success_criteria=current_skeleton.success_criteria,
         )
         return revised, "Stub revision: no changes applied."
 

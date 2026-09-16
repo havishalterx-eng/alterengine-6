@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from src.ads_client.client import StubAdsClient
 from src.ads_client.models import RetrieveRequest, RetrieveResponse
-from src.planner.kernel import PlannerKernel, PlannerValidationError
+from src.planner.kernel import PlannerExecutionError, PlannerKernel, PlannerValidationError
 from src.planner.llm_client import StubLlmClient
 from src.planner.manager_worker import ManagerWorkerPlan
 from src.planner.models import (
@@ -21,7 +21,7 @@ from src.planner.strategies import (
     STRATEGY_MANAGER_WORKER,
     STRATEGY_PLAN_THEN_EXECUTE,
 )
-from src.planner.task_skeleton import TaskSkeleton
+from src.planner.task_skeleton import TaskNode, TaskSkeleton
 from src.problem_understanding.models import ProblemSpec, problem_spec_json
 
 TENANT_ID = "ten_018f4d6e-2b4a-7a3e-8c1a-1234567890ab"
@@ -91,6 +91,60 @@ class TestDecompose:
 
         skeleton = TaskSkeleton.from_json(response.task_skeleton_json)
         assert all(node.success_criteria == criteria for node in skeleton.nodes)
+
+    async def test_keeps_explicit_criterion_assignments_per_node(self) -> None:
+        criteria = ["Research is complete.", "Summary is complete."]
+
+        class ExplicitAssignmentLlm(StubLlmClient):
+            async def generate_skeleton(self, **kwargs: object) -> TaskSkeleton:
+                return TaskSkeleton(
+                    nodes=[
+                        TaskNode(
+                            key="research",
+                            type="llm",
+                            success_criteria=[criteria[0]],
+                        ),
+                        TaskNode(
+                            key="summary",
+                            type="llm",
+                            depends_on=["research"],
+                            success_criteria=[criteria[1]],
+                        ),
+                    ],
+                    entry_point="research",
+                )
+
+        response = await PlannerKernel(
+            ads_client=StubAdsClient(), llm_client=ExplicitAssignmentLlm()
+        ).decompose(_decompose_req(
+            problem_spec_json=problem_spec_json(ProblemSpec(
+                objective="research and summarise",
+                success_criteria=criteria,
+            ))
+        ))
+
+        skeleton = TaskSkeleton.from_json(response.task_skeleton_json)
+        assert [node.success_criteria for node in skeleton.nodes] == [[criteria[0]], [criteria[1]]]
+        assert skeleton.success_criteria == criteria
+
+    async def test_rejects_an_intake_criterion_with_no_node_assignment(self) -> None:
+        criteria = ["Research is complete.", "Summary is complete."]
+
+        class IncompleteAssignmentLlm(StubLlmClient):
+            async def generate_skeleton(self, **kwargs: object) -> TaskSkeleton:
+                return TaskSkeleton(
+                    nodes=[TaskNode(key="research", type="llm", success_criteria=[criteria[0]])],
+                    entry_point="research",
+                )
+
+        kernel = PlannerKernel(ads_client=StubAdsClient(), llm_client=IncompleteAssignmentLlm())
+        with pytest.raises(PlannerExecutionError, match="Summary is complete"):
+            await kernel.decompose(_decompose_req(
+                problem_spec_json=problem_spec_json(ProblemSpec(
+                    objective="research and summarise",
+                    success_criteria=criteria,
+                ))
+            ))
 
     async def test_ambiguity_false_for_short_objective_with_no_kb(self) -> None:
         kernel = _kernel()
