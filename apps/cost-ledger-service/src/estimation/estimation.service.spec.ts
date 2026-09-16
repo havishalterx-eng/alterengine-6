@@ -293,6 +293,18 @@ describe.sequential("EstimationService", () => {
     ).rejects.toThrow(EstimationValidationError);
   });
 
+  it("rejects a cost source outside COST_SOURCES", async () => {
+    await expect(
+      service.estimate({
+        tenantId: TENANT_A,
+        mode: "workflow",
+        lineItems: [
+          { source: "telepathy" as never, provider: "unknown", resource: "unknown", expectedQuantity: 1 },
+        ],
+      }),
+    ).rejects.toThrow("source must be one of model_gateway, tool_gateway, sandbox, storage, browser");
+  });
+
   it("rejects a malformed tenantId", async () => {
     await expect(
       service.estimate({

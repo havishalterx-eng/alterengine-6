@@ -7,6 +7,7 @@ import type {
   EstimateLineItemRequest,
   EstimateLineItemResult,
 } from "./estimation.models";
+import { COST_SOURCES } from "./estimation.models";
 import type { CostResolveUnitPriceRequest, CostResolveUnitPriceResponse } from "@alterx/contracts";
 
 interface HistoricalAverageRow {
@@ -49,6 +50,11 @@ export class EstimationService {
       throw new EstimationValidationError("lineItems must not be empty");
     }
     for (const item of request.lineItems) {
+      if (!COST_SOURCES.includes(item.source as (typeof COST_SOURCES)[number])) {
+        throw new EstimationValidationError(
+          `source must be one of ${COST_SOURCES.join(", ")}`,
+        );
+      }
       if (!Number.isFinite(item.expectedQuantity) || item.expectedQuantity <= 0) {
         throw new EstimationValidationError(
           `expectedQuantity for ${item.source}/${item.provider}/${item.resource} must be a positive number`,
