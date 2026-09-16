@@ -349,6 +349,36 @@ describe("ProjectController routes", () => {
     },
   );
 
+  it.each(["/api/v1/projects", `/api/v1/projects/${projectId}`])("Revive B4 GET %s relays project reads", async (path) => {
+    const detail = { id: projectId, tenantId, workspaceId, name: "Project", status: "draft", createdAt: "2026-09-16T00:00:00Z", updatedAt: "2026-09-16T00:00:00Z" };
+    const body = path === "/api/v1/projects" ? { projects: [detail] } : detail;
+    engine.get.mockResolvedValueOnce({ status: 200, body, requestId: "req_engine" });
+    const response = await request("GET", path, { actor: viewer });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(body);
+    expect(response.headers["request_id"]).toBe("req_engine");
+    expect(engine.get).toHaveBeenCalledExactlyOnceWith(path, expect.objectContaining({ tenantId, workspaceId }));
+  });
+
+  it.each(["/api/v1/projects", `/api/v1/projects/${projectId}`])("Revive B4 GET %s enforces scope and upstream failures", async (path) => {
+    const denied = await request("GET", path, { actor: { ...viewer, permissions: [] } });
+    expectProblem(denied, 403, "RBAC_PERMISSION_DENIED");
+    expect(engine.get).not.toHaveBeenCalled();
+    engine.failNext("GET", path);
+    const failure = await request("GET", path, { actor: viewer });
+    expectProblem(failure, 409, "ENGINE_PROJECT_CONFLICT");
+  });
+
+  it("Revive B4 detail hides another workspace", async () => {
+    engine.get.mockResolvedValueOnce({ status: 200, body: { id: projectId, workspaceId: "ws_other" } });
+    expectProblem(await request("GET", `/api/v1/projects/${projectId}`, { actor: viewer }), 404, "PROJECT_NOT_FOUND");
+  });
+
+  it("Revive B4 detail validates project ID", async () => {
+    expectProblem(await request("GET", "/api/v1/projects/invalid", { actor: viewer }), 400, "PROJECT_VALIDATION_FAILED");
+    expect(engine.get).not.toHaveBeenCalled();
+  });
+
   it("enforces project read versus write and act roles", async () => {
     expect(
       (

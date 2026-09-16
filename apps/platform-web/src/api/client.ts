@@ -20,6 +20,7 @@ import { MarketplaceAdminService } from "./services/marketplace-admin"
 import { FeatureFlagsService } from "./services/feature-flags"
 import { SupportAccessService } from "./services/support-access"
 import { isLiveApi } from "./http"
+import type { HumanActionFilters } from "./types"
 import * as live from "./live"
 import { 
   mockWorkflows, mockRuns, mockDashboardSummary, 
@@ -422,7 +423,7 @@ class ApiClient {
   }
 
   // Human Actions
-  async getHumanActions(filters?: any): Promise<HumanAction[]> {
+  async getHumanActions(filters?: HumanActionFilters): Promise<HumanAction[]> {
     if (isLiveApi) return live.getHumanActions(filters)
     await delay(MOCK_DELAY)
     let actions = [...mockHumanActions]
@@ -765,6 +766,7 @@ class ApiClient {
   }
 
   async removeTrigger(id: string): Promise<void> {
+    if (isLiveApi) throw new Error("Trigger removal is not available: no delete route exists. Disable the trigger instead.")
     await delay(MOCK_DELAY)
     const index = mockTriggers.findIndex(t => t.id === id)
     if (index > -1) mockTriggers.splice(index, 1)

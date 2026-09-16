@@ -19,6 +19,7 @@ import {
   parseArtifactId,
   parseCreateRunRequest,
   parseRunId,
+  parseRunAction,
   parseRunListQuery,
   parseTraceparent,
   serializeQuery,
@@ -60,6 +61,21 @@ export class RunService {
       callerContext(actor, traceparent, instance),
       { idempotencyKey },
     );
+  }
+
+  action(
+    runId: string,
+    action: "cancel" | "retry-node",
+    input: unknown,
+    actor: ActorContext,
+    traceparent: string | undefined,
+    idempotencyKey: string,
+  ): Promise<EngineResponse<EngineResource>> {
+    const instance = `/api/v1/runs/${runId}/actions/${action}`;
+    const id = parseRunId(runId, instance);
+    const body = parseRunAction(action, input, instance);
+    return this.engine.post(`/api/v1/runs/${encodeURIComponent(id)}/actions/${action}`, body,
+      callerContext(actor, traceparent, instance), { idempotencyKey });
   }
 
   async detail(

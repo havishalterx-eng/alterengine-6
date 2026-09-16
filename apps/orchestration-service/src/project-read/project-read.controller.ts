@@ -64,6 +64,15 @@ export class ProjectReadController {
     }
   }
 
+  @Get()
+  async list(@Req() request: SessionGatewayRequest) {
+    try {
+      return { projects: await this.service.listProjects(requiredTenantId(request), requiredWorkspaceId(request)) };
+    } catch (error: unknown) {
+      throw mapProjectError(error, request.url);
+    }
+  }
+
   @Get(":id")
   async get(@Req() request: SessionGatewayRequest, @Param("id") projectId: string) {
     const tenantId = requiredTenantId(request);

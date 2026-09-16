@@ -117,6 +117,34 @@ describe("RunController routes", () => {
     );
   });
 
+  it.each(["cancel", "retry-node"] as const)("Revive B4 %s relays the exact action", async (action) => {
+    const payload = action === "cancel" ? {} : { node_key: "node-1" };
+    const response = await app.inject({ method: "POST", url: `/api/v1/runs/${runId}/actions/${action}`,
+      headers: { "x-test-actor": JSON.stringify({ ...actor, roles: ["operator"] }), "idempotency-key": `action-${action}` }, payload });
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toEqual(engine.run);
+    expect(engine.post).toHaveBeenCalledExactlyOnceWith(`/api/v1/runs/${runId}/actions/${action}`, payload,
+      expect.objectContaining({ tenantId: actor.tenant_id, workspaceId: actor.workspace_id }), { idempotencyKey: `action-${action}` });
+  });
+
+  it.each(["cancel", "retry-node"] as const)("Revive B4 %s rejects viewers and malformed input before dispatch", async (action) => {
+    const url = `/api/v1/runs/${runId}/actions/${action}`;
+    const denied = await app.inject({ method: "POST", url, headers: { "x-test-actor": JSON.stringify(actor), "idempotency-key": "denied" }, payload: {} });
+    expect(denied.statusCode).toBe(403);
+    for (const payload of action === "cancel" ? [{ unexpected: true }] : [{}, { node_key: " " }, { node_key: 42 }, { node_key: "ok", tenant_id: "other" }]) {
+      const invalid = await app.inject({ method: "POST", url, headers: { "x-test-actor": JSON.stringify({ ...actor, roles: ["operator"] }), "idempotency-key": "invalid" }, payload });
+      expect(invalid.statusCode).toBe(400);
+    }
+    expect(engine.post).not.toHaveBeenCalled();
+  });
+
+  it.each(["cancel", "retry-node"] as const)("Revive B4 %s propagates upstream failure", async (action) => {
+    engine.post.mockRejectedValueOnce(new EngineProblemError({ type: "https://errors.alter.ai/run-conflict", title: "Conflict", status: 409, detail: "Run state conflict", instance: `/api/v1/runs/${runId}/actions/${action}`, error_code: "RUN_STATE_CONFLICT", trace_id: "trc_engine", request_id: "req_engine", retryable: false, field_errors: [], documentation_key: "runs.conflict" }));
+    const response = await app.inject({ method: "POST", url: `/api/v1/runs/${runId}/actions/${action}`, headers: { "x-test-actor": JSON.stringify({ ...actor, roles: ["operator"] }), "idempotency-key": "conflict" }, payload: action === "cancel" ? {} : { node_key: "node-1" } });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ error_code: "RUN_STATE_CONFLICT" });
+  });
+
   it("lists paginated opaque rows using only real filters", async () => {
     const response = await request(
       "/api/v1/runs?cursor=next&limit=25&status=running&started_after=2026-07-01T00%3A00%3A00.000Z&started_before=2026-07-26T00%3A00%3A00.000Z",

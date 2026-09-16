@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { TenantIdSchema } from "@alterx/contracts";
+import { TenantIdSchema, WorkspaceIdSchema } from "@alterx/contracts";
 
 export class ProjectNotFoundError extends Error {
   constructor(projectId: string) {
@@ -133,6 +133,21 @@ function bareTenantUuid(tenantId: string): string {
  */
 export class ProjectReadService {
   constructor(private readonly store: OrchestrationTenantStore) {}
+
+  async listProjects(tenantId: string, workspaceId: string): Promise<Project[]> {
+    const bareTenant = bareTenantUuid(tenantId);
+    const workspace = WorkspaceIdSchema.safeParse(workspaceId);
+    if (!workspace.success) throw new ProjectValidationError("workspaceId must be a ws_ prefixed UUIDv7");
+    return this.store.withTenant(bareTenant, async (tx) => {
+      // ponytail: unpaginated workspace list; add cursor pagination when project counts require it.
+      const result = await tx.query<ProjectRow>(
+        `SELECT id, tenant_id, workspace_id, name, status, created_at, updated_at
+         FROM projects WHERE tenant_id = $1 AND workspace_id = $2 ORDER BY created_at DESC, id DESC`,
+        [bareTenant, workspace.data.slice("ws_".length)],
+      );
+      return result.rows.map(projectFromRow);
+    });
+  }
 
   async getProject(tenantId: string, projectId: string): Promise<Project> {
     requireNonEmpty("tenantId", tenantId);

@@ -57,6 +57,10 @@ export function parseCreateRunRequest(input: unknown, instance: string): CreateR
   );
 }
 
+export function parseRunAction(action: "cancel" | "retry-node", input: unknown, instance: string): Record<string, string> {
+  return parse(action === "cancel" ? z.object({}).strict() : z.object({ node_key: z.string().trim().min(1).max(200) }).strict(), input ?? {}, instance);
+}
+
 export function parseRunId(value: string, instance: string): string {
   return parseId(value, idPatterns.run, "runId", "run_ UUIDv7", instance);
 }

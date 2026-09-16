@@ -30,9 +30,9 @@ export function TriggerList({ workflowId }: TriggerListProps) {
     mutationFn: (id: string) => api.testTrigger(id),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.triggers.list(workflowId) })
-      // Normally we'd show a toast here
       alert(data.success ? `Success: ${data.message}` : `Failed: ${data.message}`)
-    }
+    },
+    onError: (error) => alert(`Failed: ${error.message}`)
   })
 
   if (isLoading) return <div className="p-8 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>

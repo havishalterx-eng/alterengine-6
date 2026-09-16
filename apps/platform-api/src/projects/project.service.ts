@@ -17,6 +17,7 @@ import type {
   ProjectClarificationList,
   ProjectPlan,
   ProjectResource,
+  ProjectSummary,
   RejectPlanInput,
   RequestPlanChangesInput,
 } from "./types";
@@ -44,6 +45,22 @@ export class ProjectService {
       callerContext(actor, traceparent, instance),
       { idempotencyKey },
     );
+  }
+
+  list(actor: ActorContext, traceparent: string | undefined): Promise<EngineResponse<{ projects: ProjectSummary[] }>> {
+    const instance = "/api/v1/projects";
+    return this.engine.get(instance, callerContext(actor, traceparent, instance));
+  }
+
+  async detail(projectId: string, actor: ActorContext, traceparent: string | undefined): Promise<EngineResponse<ProjectSummary>> {
+    const instance = `/api/v1/projects/${projectId}`;
+    const id = parseProjectId(projectId, instance);
+    const context = callerContext(actor, traceparent, instance);
+    const response = await this.engine.get<ProjectSummary>(`/api/v1/projects/${encodeURIComponent(id)}`, context);
+    if (response.body.workspaceId.replace(/^ws_/, "") !== context.workspaceId.replace(/^ws_/, "")) {
+      throw new ProjectHttpError(404, "PROJECT_NOT_FOUND", "Project not found in this workspace", instance);
+    }
+    return response;
   }
 
   clarifications(
