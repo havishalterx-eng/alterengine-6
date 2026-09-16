@@ -259,7 +259,11 @@ cannot heal itself.
       prompt's gate: its Docker socket was denied and its AWS route was dead, and a partial
       live run nobody scoped in advance is how a phase gets closed on evidence that does not
       cover it.
-- [!] **2.4b [+] BOTH its steps are findings, not demonstrations. 2026-09-15/16.** **Step 5
+- [~] **2.4b [+] step 5 done and step 6 unblocked. 2026-09-15/16.** **Step 5 closed** — driven
+      live against Bedrock, and it found **C29**: the adapter wraps every response so
+      `output_json` always parses and off-contract prose is accepted as a valid node result.
+      **Step 6 is demonstrable after all** — C28 was withdrawn; the drift-to-policy-to-ranking
+      chain exists. What remains is a live run proving it moves. Original, superseded: **Step 5
       done** — driven live against Bedrock, and it found **C29**: the adapter wraps every
       response so `output_json` always parses, `MODEL_OUTPUT_INVALID` is unreachable, and
       off-contract prose is accepted as a valid node result. **Step 6 blocked** — see below;
@@ -580,7 +584,14 @@ demo.
       and which provider that is has not been established. Found by task 2.4b step 5, live
       against Bedrock; pinned by
       `apps/orchestration-service/src/recovery/model-output-failure.live.spec.ts`.
-- [ ] **C28 [+] the Drift Detector's inward path to Policy Store (§17).** Drift scores compute,
+- [x] **C28 [+] WITHDRAWN 2026-09-16 — the path exists.** `DriftDetector` calls
+      `apply_drift_decay`, which decays the tenant's `routing_weights` policy and promotes the
+      replacement; selection reads those weights on every bind. My original finding grepped for
+      readers of the `drift_scores` table and missed the call path entirely. **What survives as
+      a real question:** the decay is tenant-wide and lowers `similarity_weight` only, so it
+      shifts how candidates are weighed rather than penalising the drifted agent. Whether the
+      gate's "changes the next selection" means that, or means per-agent penalisation, is worth
+      settling deliberately. Original, incorrect finding: Drift scores compute,
       persist, and are readable by their tenant — and nothing consumes them. `DriftAction`
       records `weight_decay` as an intent no code performs. Selection reads routing weights from
       Policy Store, so the shortest honest fix is for a drift verdict to propose a policy rather

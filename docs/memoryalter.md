@@ -1211,6 +1211,41 @@ Havish, none on engineering.
   `apps/model-gateway/src/gateway/model-gateway.service.ts:270,494-512`,
   `apps/orchestration-service/src/registry/handlers/llmtask.handler.ts:112-125`.
 
+### C28 was wrong: drift does change the next selection, via the routing policy
+
+- **What.** The entry above concluded "nothing reads a drift score" and "drift never writes a
+  policy". **The second half is false, and it is the half that mattered.**
+  `DriftDetector` (`drift/detector.py:108-112`) calls
+  `PolicyStoreService.apply_drift_decay` whenever drift is statistically significant. That
+  method reads the tenant's active `routing_weights` policy, decays `similarity_weight` to
+  `current * (1 - score)`, then drafts a new policy, canaries it, rolls back the old one and
+  promotes the replacement. Selection reads those weights on every bind through
+  `selection_binding/policy_client.py`. **The chain is complete and it is design log §17's
+  inward path, already built.**
+- **How I got it wrong.** I grepped for readers of the `drift_scores` *table*, found only
+  memory-service and the eval harness, and concluded the mechanism was absent. The mechanism
+  never needed to read that table: the detector acts on its own verdict before persisting it,
+  and `action_taken` on the row is the *record* of what it did, not an unexecuted intent. I
+  read `weight_decay` as a label nobody honours when it is a label written **because** the
+  decay succeeded — `action = "weight_decay" if await ... else "flagged"`.
+- **The same error shape as C27, two days running.** Search for the thing you expect to find,
+  conclude absence when the search misses. Both times the search was competent and aimed at
+  the wrong object. **Following one call path end to end would have answered it in minutes,
+  and grep felt faster.**
+- **What is genuinely true, and is the real finding.** The decay is **tenant-wide and
+  single-dimensional**: it lowers `similarity_weight` for the whole tenant, shifting the
+  ranking away from capability similarity and toward measured performance. It does **not**
+  penalise the drifted agent specifically. So "a drift score changes the next selection" holds
+  at the level of how candidates are weighed, and whether a *different agent wins* depends on
+  the candidate set. That is a narrower claim than the phase gate's wording, and it is worth
+  settling deliberately rather than discovering during a demo.
+- **Consequence for 2.4b.** Step 6 is demonstrable after all. It needs a live run where
+  significant drift moves the weight and a repeated bind is ranked with it.
+- **When.** 2026-09-16.
+- **Where.** `apps/memory-service/src/drift/detector.py:100-125`,
+  `apps/memory-service/src/policy_store/service.py:94-160`,
+  `apps/intelligence-service/src/selection_binding/policy_client.py`.
+
 ---
 
 ## 6. Component ledger
