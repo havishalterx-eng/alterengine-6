@@ -361,6 +361,36 @@ or it becomes a ratchet that treats a year-old document as infallible.
 
 **Decided by.** Havish.
 
+### 2026-09-16 — the freeze is lifted for three components, for C29 only
+
+**Decision.** Standing rule 1 is waived for **Graph Compiler**, **the Executor** and the
+**Verification & Quality Gate**, for task C29 and nothing else. Recorded before any code is
+written, as rule 1 requires.
+
+**What each is allowed to change.** Graph Compiler carries success criteria from the task
+skeleton onto the compiled DAG. The Executor passes a node its own criteria at run time. The
+Verification & Quality Gate judges output against them. **No other Category 1 component is in
+scope, and no change beyond what carrying and judging criteria requires.**
+
+**Why the freeze existed, and why it still mostly holds.** Those twenty-five components are the
+only verified value in the system, and changing them during a revival turns known-good into
+unknown. That reasoning has not weakened. What changed is the safety net: there is now a real
+end-to-end recovery test against Postgres (PR #10), a green CI running every suite, and a
+platform gate (PR #12/#13), so a regression in the compiler or the executor is far more likely to
+be caught than it was on 2026-09-07 when the freeze was set.
+
+**Why the alternative was worse.** Without it, nothing checks that a model's answer is the answer
+the task asked for, and off-contract prose passes as a valid node result — the engine silently
+succeeding at the wrong work, which is the failure this project exists to stop. The cheap
+alternative, a per-node `output_schema`, was rejected because it would place a second judge of
+node output beside this very gate, permanently.
+
+**Obligation attached.** Every file touched in the three is named in the builder's report, and
+each slice lands as its own pull request. If a slice turns out to need a fourth Category 1
+component, the builder **stops and reports** rather than extending this exemption by inference.
+
+**Decided by.** Havish, explicitly, naming all three.
+
 ---
 
 ## 3. Checklist context

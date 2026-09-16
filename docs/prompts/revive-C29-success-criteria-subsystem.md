@@ -1,9 +1,13 @@
 # Master prompt — Project Revive, C29 / C12: carry success criteria to where output is judged
 
-**This breaches standing rule 1 and needs Havish's explicit sign-off before a line is written.**
-The path runs through Graph Compiler, the Executor and the Verification & Quality Gate, all
-Category 1. Rule 1 says anything necessary is **recorded in `memoryalter.md` before it is made**.
-Do not start until that record exists and names the components.
+**The standing-rule-1 exemption is GRANTED and recorded.** Havish authorised it explicitly on
+2026-09-16, naming all three: **Graph Compiler**, **the Executor**, and the **Verification &
+Quality Gate**. The decision entry is in `docs/memoryalter.md` §2, dated 2026-09-16 — read it
+before you touch any of them, because it bounds what you may change in each.
+
+**It covers those three and nothing else.** If a slice turns out to need a fourth Category 1
+component, **stop and report**. Do not extend the exemption by inference. Every file you touch
+in the three must be named in your report.
 
 **Needs Docker.** Confirm before accepting. Clone into `~/alter-work/`, never a deep scratch
 path — a clone eleven directories down made vitest's file walk non-terminating for an hour
