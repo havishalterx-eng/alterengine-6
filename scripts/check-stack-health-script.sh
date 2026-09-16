@@ -54,4 +54,15 @@ for v in $compose_vars; do
 done
 [ "$missing" -eq 0 ] || exit 1
 
+# Application health probes must compare the responder's service identity;
+# HTTP 200 alone let a sibling process masquerade as this stack.
+for service in audit-service ads-core cost-ledger-service orchestration-service \
+  background-workers model-gateway tool-gateway sandbox-service provisioning-service \
+  platform-api intelligence-service verification-service memory-service eval-service; do
+  if ! grep -qE "check_http \"${service}\".* ${service}$" "$HEALTH"; then
+    echo "check-stack-health-script: $service probe has no service-identity expectation" >&2
+    exit 1
+  fi
+done
+
 echo "check-stack-health-script ok: $HEALTH syntax valid, all $(echo "$compose_vars" | wc -l | tr -d ' ') compose dependency port(s) read by the health script, no bare-literal ports."

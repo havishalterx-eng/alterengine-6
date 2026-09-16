@@ -52,14 +52,21 @@ pass() { printf '  [PASS] %s\n' "$1"; }
 fail() { printf '  [FAIL] %s -- %s\n' "$1" "$2"; FAILURES=$((FAILURES + 1)); }
 
 check_http() {
-  name="$1"; url="$2"
+  name="$1"; url="$2"; expected_service="${3:-}"
   body=$(curl -s --max-time 5 "$url" 2>&1)
   code=$(curl -s -o /dev/null --max-time 5 -w '%{http_code}' "$url" 2>&1)
-  if [ "$code" = "200" ]; then
-    pass "$name ($url) -> $body"
-  else
+  if [ "$code" != "200" ]; then
     fail "$name ($url)" "HTTP ${code:-000}, body: $body"
+    return
   fi
+  if [ -n "$expected_service" ]; then
+    service="$(printf '%s' "$body" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("service", ""))' 2>/dev/null || true)"
+    if [ "$service" != "$expected_service" ]; then
+      fail "$name ($url)" "HTTP 200 but service identity was '$service' (expected '$expected_service'); body: $body"
+      return
+    fi
+  fi
+  pass "$name ($url) -> $body"
 }
 
 check_grpc() {
@@ -137,20 +144,20 @@ check_http "localstack (own health endpoint)" "http://127.0.0.1:${LOCALSTACK_POR
 
 echo ""
 echo "== Application services (HTTP) =="
-check_http "audit-service"         "http://127.0.0.1:${AUDIT_PORT:-3021}/health"
-check_http "ads-core"              "http://127.0.0.1:${ADS_CORE_PORT:-8010}/health"
-check_http "cost-ledger-service"   "http://127.0.0.1:${COST_PORT:-3022}/health"
-check_http "orchestration-service" "http://127.0.0.1:${ORCHESTRATION_PORT:-3010}/health"
-check_http "background-workers"    "http://127.0.0.1:${BACKGROUND_WORKERS_PORT:-3011}/health"
-check_http "model-gateway"         "http://127.0.0.1:${MODEL_GATEWAY_PORT:-3023}/health"
-check_http "tool-gateway"          "http://127.0.0.1:${TOOL_GATEWAY_PORT:-3024}/health"
-check_http "sandbox-service"       "http://127.0.0.1:${SANDBOX_SERVICE_PORT:-3025}/health"
-check_http "provisioning-service"  "http://127.0.0.1:${PROVISIONING_SERVICE_PORT:-3026}/health"
-check_http "platform-api"          "http://127.0.0.1:${PLATFORM_API_PORT:-3020}/health"
-check_http "intelligence-service"  "http://127.0.0.1:${INTELLIGENCE_SERVICE_PORT:-8000}/health"
-check_http "verification-service"  "http://127.0.0.1:${VERIFICATION_SERVICE_PORT:-8001}/health"
-check_http "memory-service"        "http://127.0.0.1:${MEMORY_SERVICE_PORT:-8002}/health"
-check_http "eval-service"          "http://127.0.0.1:${EVAL_SERVICE_PORT:-8003}/health"
+check_http "audit-service"         "http://127.0.0.1:${AUDIT_PORT:-3021}/health" audit-service
+check_http "ads-core"              "http://127.0.0.1:${ADS_CORE_PORT:-8010}/health" ads-core
+check_http "cost-ledger-service"   "http://127.0.0.1:${COST_PORT:-3022}/health" cost-ledger-service
+check_http "orchestration-service" "http://127.0.0.1:${ORCHESTRATION_PORT:-3010}/health" orchestration-service
+check_http "background-workers"    "http://127.0.0.1:${BACKGROUND_WORKERS_PORT:-3011}/health" background-workers
+check_http "model-gateway"         "http://127.0.0.1:${MODEL_GATEWAY_PORT:-3023}/health" model-gateway
+check_http "tool-gateway"          "http://127.0.0.1:${TOOL_GATEWAY_PORT:-3024}/health" tool-gateway
+check_http "sandbox-service"       "http://127.0.0.1:${SANDBOX_SERVICE_PORT:-3025}/health" sandbox-service
+check_http "provisioning-service"  "http://127.0.0.1:${PROVISIONING_SERVICE_PORT:-3026}/health" provisioning-service
+check_http "platform-api"          "http://127.0.0.1:${PLATFORM_API_PORT:-3020}/health" platform-api
+check_http "intelligence-service"  "http://127.0.0.1:${INTELLIGENCE_SERVICE_PORT:-8000}/health" intelligence-service
+check_http "verification-service"  "http://127.0.0.1:${VERIFICATION_SERVICE_PORT:-8001}/health" verification-service
+check_http "memory-service"        "http://127.0.0.1:${MEMORY_SERVICE_PORT:-8002}/health" memory-service
+check_http "eval-service"          "http://127.0.0.1:${EVAL_SERVICE_PORT:-8003}/health" eval-service
 check_http "platform-web"          "http://localhost:${PLATFORM_WEB_PORT:-5173}/"
 check_http "local-mock-auth0 jwks" "http://127.0.0.1:${MOCK_AUTH0_PORT:-4999}/.well-known/jwks.json"
 
