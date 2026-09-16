@@ -52,6 +52,7 @@ Format: `YYYY-MM-DD · task · what was demonstrated · who verified`
 - `2026-09-16 · 2.4b step 5 · real Bedrock prose arrives wrapped in valid JSON, so no coded failure is produced and off-contract output is accepted as a valid node result (C29) · verified live, proven to discriminate, merged PR #11`
 - `2026-09-16 · 2.4b step 6 · the full drift-to-ranking chain composed and run on one machine: significant drift decays the tenant routing policy 0.8 to 0.0, and an active routing policy changes which agent the ranked query returns · verified live, both halves by existing tests`
 - `2026-09-16 · C28 · withdrawn: drift DOES change the next selection. The original finding grepped for readers of drift_scores and missed the detector's own call to apply_drift_decay · corrected in memoryalter`
+- `2026-09-16 · B5/B4/B-vocab · trigger controls stop reporting success without a request, four missing routes added, platform adopts the engine's approval enum · PR #12 merged, CI green; artefacts assert on the call, not the rendered result; proven against an isolated harness with real Postgres, NOT a running platform stack`
 
 ---
 
@@ -70,7 +71,9 @@ applications (sandbox-service, provisioning-service), and the Anthropic/OpenAI k
 
 **3.0** (auto-creation idempotency) **closed 2026-09-08, superseded 2026-09-14** — our idempotency key and migration are replaced by `alter-x-4-`'s equivalent, which also fixes the tier. The 2026-09-08 verification stands as a record of what was proven; the code it proved is no longer the code that ships.
 
-**Phase 2: 2.1, 2.2 and 2.3 now demonstrated here (2.4a, PR #10). 2.4b is what remains.**
+**Phase 2 closed 2026-09-16.** 2.4a demonstrated the local half (PR #10); 2.4b's two steps
+both landed as findings — C29 (off-contract output is accepted as valid) and the withdrawal of
+C28 (drift does reach the ranking). **Track B is 3 of 6:** B5, B4 and B-vocab closed via PR #12.
 (Superseded note follows.) **Phase 2 code imported 2026-09-14, phase NOT closed.** 2.1, 2.2 and 2.3 arrive from
 `alter-x-4-` in PR #9. **2.4 is open and is now the whole of the phase**: nobody has watched
 one deliberately failed run produce a recovery, a memory record and a drift score readable by
