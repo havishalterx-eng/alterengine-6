@@ -59,6 +59,7 @@ Format: `YYYY-MM-DD · task · what was demonstrated · who verified`
 - `2026-09-16 · C23 · stack health check now compares response-body service identity, not just HTTP 200 · verified live against two service processes deliberately bound to swapped ports, both correctly caught`
 - `2026-09-16 · C25 · answered, not a gap: 21 project targets already have real per-project lint (ESLint/Ruff/Oxlint); no root eslint.config needed`
 - `2026-09-16 · C29 slice 1 · success criteria carry ProblemSpec to skeleton to architecture to compiled DAG to stored version; workflows without criteria still compile · PR #14 merged, CI green on the merged sha (7fc6fab), proven to fail by removing the carry`
+- `2026-09-16 · C29 slice 2a · Planner assigns intake criteria to named nodes; unassigned criteria AND invented ones both fail validation; global list retained at root for slice 3 · PR #15 merged, CI green on the merged sha (50aa7dc), proven to fail with DID NOT RAISE PlannerExecutionError`
 
 ---
 
