@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validatePlatformApiEnv } from "./env.schema";
+import { platformApiConfigSource, validatePlatformApiEnv } from "./env.schema";
 
 describe("platformApiEnvSchema", () => {
   const cursorSecret = "test-search-cursor-secret";
@@ -49,7 +49,7 @@ describe("platformApiEnvSchema", () => {
     });
   });
 
-  it("ignores the retired service-scoped config source", () => {
+  it("honours deprecated service-scoped config source", () => {
     expect(
       validatePlatformApiEnv({
         DATABASE_URL: "postgres://platform_api:platform_api_local@localhost:5432/platform_db",
@@ -60,8 +60,11 @@ describe("platformApiEnvSchema", () => {
         ALTER_CONFIG_SOURCE: "local-file",
         RUNTIME_MODE: "mock",
         PLATFORM_API_CONFIG_SOURCE: "appconfig",
+        APPCONFIG_APP_ID: "app",
+        APPCONFIG_ENV_ID: "env",
+        APPCONFIG_PROFILE_ID: "profile",
       }).ALTER_CONFIG_SOURCE,
-    ).toBe("local-file");
+    ).toBe("appconfig");
   });
 
   it("rejects mock runtime mode in production", () => {
@@ -238,6 +241,55 @@ describe("platformApiEnvSchema", () => {
     })).toMatchObject({
       OPERATIONS_PLATFORM_DATABASE_URL: "postgres://localhost/platform_admin",
       OPERATIONS_MARKETPLACE_DATABASE_URL: "postgres://localhost/marketplace_admin",
+    });
+  });
+
+  // Legacy ALTER_CONFIG_SOURCE=mock maps to platform-api's local-file source.
+  describe("config source", () => {
+    const base = {
+      DATABASE_URL: "postgres://localhost:5432/platform_db",
+      MARKETPLACE_DATABASE_URL: "postgres://localhost:5432/marketplace_db",
+      MARKETPLACE_SEARCH_CURSOR_SECRET: cursorSecret,
+      SIGNING_KEY_PROVIDER: "mock" as const,
+    };
+
+    it("does not fail on the shared Engine value", () => {
+      expect(
+        validatePlatformApiEnv({ ...base, ALTER_CONFIG_SOURCE: "mock" })
+          .ALTER_CONFIG_SOURCE,
+      ).toBe("local-file");
+    });
+
+    it("prefers the scoped variable over the shared one", () => {
+      expect(
+        validatePlatformApiEnv({
+          ...base,
+          ALTER_CONFIG_SOURCE: "mock",
+          PLATFORM_API_CONFIG_SOURCE: "appconfig",
+          APPCONFIG_APP_ID: "app",
+          APPCONFIG_ENV_ID: "env",
+          APPCONFIG_PROFILE_ID: "profile",
+        }).ALTER_CONFIG_SOURCE,
+      ).toBe("appconfig");
+    });
+
+    it("still honours a shared value platform-api understands", () => {
+      expect(
+        validatePlatformApiEnv({ ...base, ALTER_CONFIG_SOURCE: "local-file" })
+          .ALTER_CONFIG_SOURCE,
+      ).toBe("local-file");
+    });
+
+    it("resolves the same way for the direct process.env readers", () => {
+      expect(
+        platformApiConfigSource({ ALTER_CONFIG_SOURCE: "mock" }),
+      ).toBe("local-file");
+      expect(
+        platformApiConfigSource({
+          ALTER_CONFIG_SOURCE: "mock",
+          PLATFORM_API_CONFIG_SOURCE: "appconfig",
+        }),
+      ).toBe("appconfig");
     });
   });
 });
