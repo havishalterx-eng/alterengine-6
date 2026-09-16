@@ -755,17 +755,6 @@ export interface WhatsAppChannel {
   createdAt: string
 }
 
-export interface VoiceChannel {
-  id: string
-  name: string
-  provider: "twilio" | "vonage" | "mock"
-  phoneNumber?: string
-  status: "connected" | "pending" | "degraded" | "disconnected"
-  voice?: string
-  language?: string
-  connectionId?: string
-  createdAt: string
-}
 
 
 
@@ -788,7 +777,7 @@ export interface CostRecord {
   timestamp: string;
   amount: number;
   currency: string;
-  category: "model" | "compute" | "storage" | "integration" | "voice" | "other";
+  category: "model" | "compute" | "storage" | "integration" | "other";
   provider?: string;
   model?: string;
   workflowId?: string;
@@ -1130,7 +1119,7 @@ export interface AuditEvent {
 export interface ProviderDefinition {
   id: string;
   name: string;
-  type: "model" | "compute" | "storage" | "email" | "messaging" | "voice" | "other";
+  type: "model" | "compute" | "storage" | "email" | "messaging" | "other";
   status: "healthy" | "degraded" | "outage" | "maintenance" | "disabled";
   enabled: boolean;
   lastCheckedAt?: string;
