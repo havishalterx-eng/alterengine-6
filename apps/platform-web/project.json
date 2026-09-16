@@ -7,7 +7,7 @@
     "serve": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "vite",
+        "command": "vite --port ${PLATFORM_WEB_PORT:-5173}",
         "cwd": "apps/platform-web"
       }
     },

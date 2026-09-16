@@ -42,7 +42,7 @@ import {
   AUDIT_CHAIN_VERIFY_JOB_TYPE,
 } from "./platform-jobs/scheduled-job-types";
 
-const { parsePort } = createEnvironmentValidators(
+const { parsePort, scopedValue } = createEnvironmentValidators(
   (field, reason) => new Error(`${field} ${reason}`),
 );
 
@@ -282,7 +282,10 @@ async function bootstrap(): Promise<void> {
     void auditChainVerifyRunner.stop();
   });
 
-  await app.listen(parsePort(process.env.PORT), "0.0.0.0");
+  await app.listen(
+    parsePort(scopedValue(process.env, "BACKGROUND_WORKERS_PORT", "PORT"), "BACKGROUND_WORKERS_PORT", 3011),
+    "0.0.0.0",
+  );
 }
 
 void bootstrap();

@@ -101,7 +101,7 @@ function createQueueProvider(environment: SandboxEnvironment): QueueProvider {
 import { SANDBOX_PROTO_PATH } from "./sandbox/grpc.constants";
 import { ARTIFACT_CONTENT_PROTO_PATH } from "./artifacts/grpc.constants";
 
-const { parsePort } = createEnvironmentValidators(
+const { parsePort, scopedValue } = createEnvironmentValidators(
   (field, reason) => new Error(`${field} ${reason}`),
 );
 
@@ -138,7 +138,10 @@ async function bootstrap(): Promise<void> {
     bindAddress: environment.grpcBindAddress,
     protoPath: SANDBOX_PROTO_PATH,
   });
-  await app.listen(parsePort(process.env.PORT), "0.0.0.0");
+  await app.listen(
+    parsePort(scopedValue(process.env, "SANDBOX_SERVICE_PORT", "PORT"), "SANDBOX_SERVICE_PORT", 3025),
+    "0.0.0.0",
+  );
 }
 
 void bootstrap();

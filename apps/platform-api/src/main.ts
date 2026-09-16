@@ -5,7 +5,7 @@ import { createEnvironmentValidators } from "@alterx/adapters";
 import { AppModule } from "./app.module";
 import { validatePlatformApiEnv } from "./config/env.schema";
 
-const { parsePort } = createEnvironmentValidators(
+const { parsePort, scopedValue } = createEnvironmentValidators(
   (field, reason) => new Error(`${field} ${reason}`),
 );
 
@@ -25,7 +25,10 @@ async function bootstrap(): Promise<void> {
   // check saw actorContext as undefined and failed closed with
   // RBAC_ROLE_DENIED even when the middleware had just set it correctly.
   app.getHttpAdapter().getInstance().decorateRequest("actorContext", null);
-  await app.listen(parsePort(process.env.PORT), "0.0.0.0");
+  await app.listen(
+    parsePort(scopedValue(process.env, "PLATFORM_API_PORT", "PORT"), "PLATFORM_API_PORT", 3020),
+    "0.0.0.0",
+  );
 }
 
 void bootstrap();
