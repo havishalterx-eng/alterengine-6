@@ -709,7 +709,7 @@ demo.
 
 ## Track D [+] — design-log conformance, after the builds
 
-**Decided 2026-09-16 by Havish.** Runs once Phase 4, Track A, Track B and Track C are finished.
+**Decided 2026-09-16 by Havish.** Runs once Phase 4, Track B and Track C are finished.
 Reasoning in [`memoryalter.md` §2](memoryalter.md#2-decisions).
 
 - [ ] **D1 the whole log against the whole system.** All 33 design-log sections against all 61

@@ -329,7 +329,7 @@ what gets built.
 
 ### 2026-09-16 — a full design-log conformance pass, after the builds, not during
 
-**Decision.** Once Phase 4, Track A, Track B and Track C are finished, compare the **entire**
+**Decision.** Once Phase 4, Track B and Track C are finished, compare the **entire**
 build against the design log and adapt the engine to it. Not a spot check of the sections
 someone happens to be touching — the whole document against the whole system.
 
