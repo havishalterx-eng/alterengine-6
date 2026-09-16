@@ -53,6 +53,11 @@ Format: `YYYY-MM-DD · task · what was demonstrated · who verified`
 - `2026-09-16 · 2.4b step 6 · the full drift-to-ranking chain composed and run on one machine: significant drift decays the tenant routing policy 0.8 to 0.0, and an active routing policy changes which agent the ranked query returns · verified live, both halves by existing tests`
 - `2026-09-16 · C28 · withdrawn: drift DOES change the next selection. The original finding grepped for readers of drift_scores and missed the detector's own call to apply_drift_decay · corrected in memoryalter`
 - `2026-09-16 · B5/B4/B-vocab · trigger controls stop reporting success without a request, four missing routes added, platform adopts the engine's approval enum · PR #12 merged, CI green; artefacts assert on the call, not the rendered result; proven against an isolated harness with real Postgres, NOT a running platform stack`
+- `2026-09-16 · C2/C6/C22/C23/C24/C25 · Track C batch 1 (PR #13) merged after two real regressions found and fixed, not one: orchestration-service and eval-service test fixtures never updated for C2's RUNTIME_MODE/ALTER_CONFIG_SOURCE split, plus a third instance (platform-api) found by sweeping the whole repo rather than waiting for a third CI round · CI watched to completion three times, confirmed green directly against the API before merge`
+- `2026-09-16 · C6 · /costs/estimate now requires a ten_-prefixed tenant ID (implements C19) and rejects any COST_SOURCES value outside the union (source: "telepathy" now throws) · verified by estimation.service.spec.ts and estimation.controller.spec.ts, real assertions`
+- `2026-09-16 · C22 · bootstrap-env-local.sh no longer generates LocalStack test/test AWS credentials at all, and verify_file() rejects them if present by any path · verified by the added regression, guard rejects then a clean env passes`
+- `2026-09-16 · C23 · stack health check now compares response-body service identity, not just HTTP 200 · verified live against two service processes deliberately bound to swapped ports, both correctly caught`
+- `2026-09-16 · C25 · answered, not a gap: 21 project targets already have real per-project lint (ESLint/Ruff/Oxlint); no root eslint.config needed`
 
 ---
 
@@ -92,3 +97,11 @@ typecheck, build and pass their suites together. It does not mean the engine beh
 real defects surfaced across four runs, every one of them at the seam between the two
 repositories rather than inside either side's work, and one of them would have passed every
 automated check the project owns.
+
+**Track C batch 1 closed 2026-09-16 (PR #13).** C2 (carrying C15), C6, C22, C23, C24, C25 —
+six of the seven items named "in flight" in the second-session handoff. Same lesson as
+above, one repository this time instead of two: the merged PR's own report claimed 117
+focused tests green, and CI disagreed twice before it agreed once, on two different
+services the builder's own tests never touched. A third instance was found by sweeping
+the whole repository rather than waiting for a third red run. See `memoryalter.md` for the
+full trace.

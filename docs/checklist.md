@@ -509,10 +509,22 @@ demo.
 - [ ] **C1 architecture gates.** Export the 11 AST gates from `alterengine--5`, each with a
       baseline allowlist of every current violation, so they fail only on **new** ones.
       Nobody stops for a cleanup sprint; every later fix lands governed.
-- [ ] **C2 `RUNTIME_MODE` switch — now carries C15.** *Decided 2026-09-15.* `RUNTIME_MODE`
-      answers *real or mock*; `ALTER_CONFIG_SOURCE` is then left answering only *where real
-      configuration lives*, with one value set every service accepts, and the scoped overrides
-      (`AUDIT_CONFIG_SOURCE`, `MODEL_GATEWAY_CONFIG_SOURCE`) collapse into it. Original scope: (§7 pattern 2). In production, any mock selection is a
+- [x] **C2 `RUNTIME_MODE` switch — CLOSED 2026-09-16, PR #13 (`3c03199`).** Carries C15.
+      `createEnvironmentValidators().runtimeMode()` (`packages/adapters/src/config/environment-validation.ts`)
+      is now shared across every service: defaults to `mock`, and throws
+      `RUNTIME_MODE: mock is not allowed when NODE_ENV is production` — the fatal-boot-error
+      §7 pattern 2 calls for, verified live in CI. `configSource()` in the same file now
+      answers only *where real configuration lives* (`appconfig`/`local-file`), rejecting
+      `mock` outright — the scoped overrides (`AUDIT_CONFIG_SOURCE`, `MODEL_GATEWAY_CONFIG_SOURCE`)
+      collapse into the one shared switch as designed. **Blast radius wider than the
+      builder's own report:** three pre-existing test fixtures across three services
+      (orchestration-service, eval-service, platform-api) simulated production without ever
+      declaring `RUNTIME_MODE`, so the new fatal guard fired before the check each test
+      actually meant to exercise. Found because CI was watched to completion twice more
+      after the builder's report claimed green — not caught by their own 117 focused tests.
+      Fixed directly (`0c9d593`, `4dd53ac`) after a full repo-wide sweep for the same
+      pattern, verified against each fix individually rather than by inference. Original
+      scope: (§7 pattern 2). In production, any mock selection is a
       fatal boot error, never a silent fallback. Do alongside Phase 1.
 - [ ] **C3 deletion registration in CI** (§18, §28). Do before more components store tenant
       data. The old build's erasure certified complete while data survived in ten tables it
@@ -521,8 +533,13 @@ demo.
       harness, which scored 0/30 on one unreachable service.
 - [ ] **C5 cost ledger records verification verdicts** (§21). Missing this early means
       backfilling data never captured.
-- [ ] **C6 cost ledger consistency.** One tenant-ID format across all routes; enforce the
-      `COST_SOURCES` union (`source: "telepathy"` is currently accepted).
+- [x] **C6 cost ledger consistency — CLOSED 2026-09-16, PR #13 (`3c03199`).**
+      `EstimationService.estimate()` (`apps/cost-ledger-service/src/estimation/estimation.service.ts`)
+      now requires a `ten_`-prefixed tenant ID and converts to bare UUID internally
+      (implements C19's decision — prefixed outside, bare inside), and rejects any
+      `lineItems[].source` not in the `COST_SOURCES` union before estimating anything —
+      `source: "telepathy"` now throws `EstimationValidationError`, verified by
+      `estimation.service.spec.ts` and `estimation.controller.spec.ts`.
 - [ ] **C7 Agent Factory extracted** as its own L4 component (§22 item 9) — two callers in
       different layers.
 - [ ] **C8 Side-Effect Ledger + idempotency gate** in front of Dispatch (§4, §22 item 7).
@@ -577,16 +594,20 @@ demo.
       fix plus the `pnpm install` gap). Done gate met for real: a genuine fresh clone, no
       hand-editing, real Docker, real AWS, produced Phase 1's first real golden-set number —
       21/30 passed, 0.70. See 1.5 above for the number and what it means.
-- [ ] **C23 the health check must verify identity, not just status.** It asserts HTTP 200 and
-      never asserts the responder is the service it asked for. Live, that produced three false
-      passes against a sibling stack's processes — and probing **eval-service**'s port returned
-      `{"service":"intelligence-service"}`, counted as healthy. The response body already
-      carries `service`; compare it. **A 200 from the wrong service is a false pass**, which is
-      worse than a failure.
-- [ ] **C24 application service ports need what C16 gave dependency ports.** C16 parameterised
-      the fourteen dependency ports and every connection URL; application service ports stayed
-      literal. So the health check probes defaults, and on a machine with sibling checkouts the
-      defaults belong to someone else. Same footgun, one layer up.
+- [x] **C23 the health check must verify identity, not just status — CLOSED 2026-09-16, PR
+      #13 (`3c03199`).** `scripts/check-stack-health-script.sh` now refuses to accept a probe
+      with no service-identity expectation (`check-stack-health-script: $service probe has no
+      service-identity expectation`), and compares the response body's `service` field against
+      the one expected — a 200 from the wrong service now fails the check instead of passing
+      it. Real regression test: two service processes deliberately bound to swapped ports (8001
+      and 18001), both answering `{"service":"verification-service"}`, both correctly caught.
+- [x] **C24 application service ports need what C16 gave dependency ports — CLOSED 2026-09-16,
+      PR #13 (`3c03199`).** `scripts/verify-coexistence.sh` now exports every application
+      service's port as an override too, not just the fourteen dependency ports C16 covered —
+      the health check probes the actual overridden ports on a multi-checkout host instead of
+      literal defaults that belong to a sibling stack. **Not independently live-verified here**
+      — the builder's report is explicit that a full multi-checkout fleet run wasn't performed;
+      the script change itself was read and is real.
 - [x] **C27 [+] NOT A DEFECT — it was the clone location. CLOSED 2026-09-15.** The same spec
       runs in 141ms from `~/alter-work/`, and never terminates from a scratch path under
       `/private/tmp` with a second clone beside it. `CLAUDE.md` already names `~/alter-work/`
@@ -631,9 +652,11 @@ demo.
       Policy Store, so the shortest honest fix is for a drift verdict to propose a policy rather
       than for selection to read drift directly — which would also give the engine one place
       where "what we learned" turns into "what we do". **Phase 2's done gate depends on this.**
-- [ ] **C25 no root `eslint.config` file exists anywhere in the repo**, despite `lint` being a
-      real, invoked target. Found while tracing a dependency-scan advisory to `@nx/eslint`; not
-      investigated further — surfaced for someone to look at.
+- [x] **C25 no root `eslint.config` file exists — ANSWERED 2026-09-16, no gap.** Checked, not
+      just surfaced this time: `lint` is real for every one of 21 project targets, each backed
+      by its own per-app ESLint, Ruff, or Oxlint config. No root config added, because none is
+      missing — the original finding assumed a single shared root config is the only valid
+      shape and never checked whether per-project configs already covered it.
 - [x] **C26 Nx graph computation on a cold, fresh clone is unusably slow, blocking 1.5/1.5b.
       CLOSED 2026-09-09** (PR #8, `50edf30`). `pnpm exec nx run eval-service:build` ran
       95–99% CPU for 14+ minutes on a genuine fresh clone and was killed, never returning —
@@ -649,10 +672,14 @@ demo.
       identical dist output files. Companion gap fixed in the same PR: a genuinely fresh
       clone has no `node_modules`, and neither the runner nor `docs/local-dev.md`'s
       Prerequisites said to run `pnpm install` first — both now do.
-- [ ] **C22 the bootstrap breaks real AWS.** C21 fills `AWS_ACCESS_KEY_ID` and
-      `AWS_SECRET_ACCESS_KEY` from LocalStack placeholders, and environment variables beat the
-      `~/.aws` profile — so sourcing the generated file returns `InvalidClientTokenId` while
-      the real credentials are fine. **Second instance of the pattern `AWS_ENDPOINT_URL`
+- [x] **C22 the bootstrap breaks real AWS — CLOSED 2026-09-16, PR #13 (`3c03199`).**
+      `scripts/bootstrap-env-local.sh` no longer generates the LocalStack `test`/`test`
+      credentials at all — removed outright, not merely guarded — and `verify_file()` now
+      rejects them explicitly (`LocalStack test AWS credentials override the operator's
+      ~/.aws profile; remove AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY from $f`) if they
+      appear by any path. Verified by the builder's own added regression: the guard rejects
+      the LocalStack credentials, and a clean environment passes. **Second instance of the
+      pattern `AWS_ENDPOINT_URL`
       showed in 1.2**: a LocalStack variable silently defeating the real-AWS path, failing in
       a way that points at the wrong thing. 1.2's instance got a fatal guard; this one has none.
 - [x] **C20 fallback chain — DECIDED 2026-09-15, and the fix is smaller than recorded.**

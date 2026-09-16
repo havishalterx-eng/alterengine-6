@@ -1309,6 +1309,74 @@ Havish, none on engineering.
 - **Where.** `apps/intelligence-service/src/problem_understanding/models.py:49`,
   `apps/orchestration-service/src/registry/handlers/llmtask.handler.ts`.
 
+### Track C batch 1 (PR #13) — real, and its actual blast radius was three services wider than reported
+
+**What.** Batch 1 (C23, C24, C22, C2 carrying C15, C6, C25) landed as PR #13. The builder's
+own report claimed 117 focused tests plus lint/typecheck green, and named one honest gap
+(a full multi-checkout fleet run for C24, not performed). CI disagreed twice before it
+agreed once.
+
+**Round 1 — a real regression, not the builder's tests' fault.** C2's new
+`runtimeMode()` guard (`packages/adapters/src/config/environment-validation.ts`) correctly
+throws when `RUNTIME_MODE` is unset (defaults to `mock`) and `NODE_ENV=production` — exactly
+what §7 pattern 2 asks for. But `orchestration-service`'s `health.controller.spec.ts` had
+long simulated a production boot by setting `NODE_ENV: "production"` in its stubbed env,
+without ever declaring `RUNTIME_MODE`, because no such field existed to declare before this
+PR. The new guard fired first, breaking a test that had nothing to do with health checks or
+config source. Fixed: `RUNTIME_MODE: "real"` added to the fixture, matching what it was
+already trying to simulate.
+
+**Round 2 — the same root cause, a second and different place.**
+`eval-service/tests/test_orchestrator_integration.py` spawns real model-gateway and
+tool-gateway subprocesses with `ALTER_CONFIG_SOURCE: "mock"` six times across the file —
+a value `configSource()` no longer accepts at all under C2's split (only `appconfig` or
+`local-file`; `RUNTIME_MODE` carries the mock/real distinction now). Every one of those
+spawns crashed at setup. Fixed by deleting all six now-invalid lines; unset correctly
+defaults to `local-file` + `mock`, which is exactly what these local-only fixtures need.
+Two stale docstrings referencing the old `ALTER_CONFIG_SOURCE=mock` convention were also
+corrected for accuracy.
+
+**Round 3 — found by sweeping rather than waiting for CI a third time.** Rather than push
+and wait again, grepped the whole repository for every `.spec.ts` file setting
+`NODE_ENV=production` (11 files) and checked each individually by running it, not by
+inference. Eight were already correct — five (`tool-gateway`, `model-gateway`,
+`audit-service`, `sandbox-service`, `platform-api/env.schema.spec.ts`) are deliberate new
+tests written *for* C2 itself; three (`identity.module.spec.ts`,
+`resolve-media-providers.spec.ts`, `resolve-email-provider.spec.ts`) test an entirely
+separate, pre-existing mock-in-production guard that never touches `RUNTIME_MODE` — both
+confirmed by running them, not assumed. The ninth,
+`platform-api/identity-broker.module.spec.ts`, had the identical Round 1 shape — `NODE_ENV
+= "production"` mid-test with no `RUNTIME_MODE` — and was fixed the same way, pre-emptively,
+before pushing.
+
+**A local-only false alarm, caught before it wasted more time.** Running the *full*
+`platform-api` suite locally (matching CI's real command, `vitest run --config
+apps/platform-api/vitest.config.ts`) showed 116 unrelated failures. Traced rather than
+panicked over: port 5432 on this machine belongs to a completely different sibling stack's
+Postgres (`alter-x-4--platform-db-1`), not this repository's database — confirmed with
+`pg_isready` and a direct `psql` connection attempt showing the wrong credentials rejected.
+Nothing to do with this fix. The three real fixes were each verified individually, against
+the real project vitest config, rather than trusting that noisy full-suite run.
+
+**A genuinely pre-existing, unrelated gap, found and deliberately left alone.**
+`toolcall.integration.spec.ts`'s real-subprocess Tool Gateway e2e test exits silently with
+code 1 on this machine. Reproduced identically against unmodified `main`, before any of
+this PR's changes existed, and confirmed it does not appear anywhere in PR #13's own CI
+log — not a regression, not blocking this PR's gate, not chased further.
+
+**Why this is worth its own entry rather than folding into the checklist line.** The
+pattern is the same one C26 and C27 already named: a fix that is correct in the code it
+touches directly can still break something at a seam it never looked at, and a builder's
+own test selection is not evidence about code the builder didn't touch. Three rounds, three
+different files, one root cause each time — found only because CI was watched to actual
+completion three times instead of trusted once.
+
+**Status.** Merged: PR #13 (`3c03199`), squash, branch kept. CI confirmed green directly
+against the API on the third run before merge.
+- **When.** 2026-09-16.
+- **Where.** `havishalterx-eng/alterengine-6#13`; fixes at `0c9d593`, `4dd53ac` on
+  `codex/revive-c-protective`.
+
 ---
 
 ## 6. Component ledger
