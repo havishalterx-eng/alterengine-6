@@ -100,7 +100,10 @@ describe.skipIf(!LIVE).sequential(
           attempt: 2,
           error: { code: "MODEL_OUTPUT_INVALID" },
         },
-        {},
+        {
+          trace_id: "trc_018f47a5-7b2c-7d10-8f11-123456789abc",
+          request_id: "req_018f47a5-7b2c-7d10-8f11-123456789abc",
+        },
       );
       expect(classified.failureClass).toBe("logic_output_failure");
       expect(
