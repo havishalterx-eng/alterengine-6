@@ -12,7 +12,7 @@ import {
 import type { FastifyReply } from "fastify";
 import type { EngineResponse } from "../engine";
 import { Idempotent } from "../idempotency";
-import { ActorContext, RequireWorkspaceRole } from "../rbac";
+import { ActorContext, RequirePermission, RequireWorkspaceRole } from "../rbac";
 import type { ActorContextType } from "../rbac";
 import { ProjectHttpError } from "./problem";
 import { ProjectExceptionFilter } from "./project-exception.filter";
@@ -27,6 +27,7 @@ import type {
   ProjectClarificationList,
   ProjectPlan,
   ProjectResource,
+  ProjectSummary,
   RejectPlanInput,
   RequestPlanChangesInput,
 } from "./types";
@@ -71,6 +72,30 @@ export class ProjectController {
       ),
       reply,
     );
+  }
+
+  @Get()
+  @RequireWorkspaceRole(...readRoles)
+  @RequirePermission("projects:read")
+  async list(
+    @ActorContext() actor: ActorContextType | undefined,
+    @Headers("traceparent") traceparent: string | undefined,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<{ projects: ProjectSummary[] }> {
+    return project(await this.projects.list(requireActor(actor, "/api/v1/projects"), traceparent), reply);
+  }
+
+  @Get(":projectId")
+  @RequireWorkspaceRole(...readRoles)
+  @RequirePermission("projects:read")
+  async detail(
+    @Param("projectId") projectId: string,
+    @ActorContext() actor: ActorContextType | undefined,
+    @Headers("traceparent") traceparent: string | undefined,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<ProjectSummary> {
+    return project(await this.projects.detail(projectId,
+      requireActor(actor, `/api/v1/projects/${projectId}`), traceparent), reply);
   }
 
   @Get(":projectId/clarifications")

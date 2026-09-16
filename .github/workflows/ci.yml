@@ -203,6 +203,9 @@ jobs:
       - name: migrate platform db
         run: pnpm --filter @alterx/platform-api db:migrate
 
+      - name: Revive platform request contracts and HTTP database integration
+        run: scripts/check-revive-platform.sh
+
       - name: test platform api
         run: pnpm exec nx test platform-api
 

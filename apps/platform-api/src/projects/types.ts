@@ -18,6 +18,16 @@ export interface RequestPlanChangesInput {
 
 export type EmptyProjectActionInput = Record<string, never>;
 
+export interface ProjectSummary {
+  id: string;
+  tenantId: string;
+  workspaceId: string;
+  name: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ProjectResource {
   project_id: string;
   workspace_id: string;

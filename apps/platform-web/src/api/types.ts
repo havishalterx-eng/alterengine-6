@@ -423,7 +423,11 @@ export interface TestResult {
 // Phase 5 Types
 
 export type HumanActionType = "approval" | "clarification" | "escalation"
+export const approvalStatuses = ["pending", "approved", "rejected", "expired"] as const
+export type ApprovalStatus = typeof approvalStatuses[number]
+// Approval API status is separate from UI action lifecycle status.
 export type HumanActionStatus = "open" | "claimed" | "resolved" | "expired" | "cancelled"
+export interface HumanActionFilters { status?: ApprovalStatus; type?: HumanActionType }
 export type HumanActionResolution = "approved" | "rejected" | "answered" | "resolved" | "dismissed"
 export type HumanActionPriority = "low" | "normal" | "high" | "critical"
 

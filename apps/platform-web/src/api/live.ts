@@ -1,6 +1,8 @@
 import { apiDelete, apiGet, apiPatch, apiPost, mutationKey } from "./http"
 import { compileDag } from "./compile-dag"
+import { approvalStatuses } from "./types"
 import type {
+  HumanActionFilters,
   Artifact,
   DashboardOverview,
   DashboardSummary,
@@ -489,7 +491,9 @@ export async function testTrigger(id: string): Promise<{ success: boolean; messa
   const body = await apiPost<AnyRecord>(`/api/v1/triggers/${encodeURIComponent(id)}/actions/test`, {}, {
     idempotencyKey: mutationKey("trigger-test"),
   })
-  return { success: true, message: "Trigger test accepted.", eventId: asString(body.eventId ?? body.event_id) }
+  const eventId = body?.eventId ?? body?.event_id
+  if (typeof eventId !== "string" || !eventId.trim()) throw new Error("Trigger test returned no event ID")
+  return { success: true, message: "Trigger test accepted.", eventId }
 }
 
 export async function enableTrigger(id: string): Promise<Trigger> {
@@ -1232,9 +1236,12 @@ function slugify(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
 }
 
-export async function getHumanActions(filters?: any): Promise<HumanAction[]> {
+export async function getHumanActions(filters?: HumanActionFilters): Promise<HumanAction[]> {
   const query = new URLSearchParams()
-  if (filters?.status) query.set("status", filters.status)
+  if (filters?.status !== undefined) {
+    if (!approvalStatuses.includes(filters.status)) throw new Error("Unsupported approval status")
+    query.set("status", filters.status)
+  }
   // Action centre handles filtering by type implicitly via source_type, but here we just fetch everything and filter if needed, or rely on API.
   // We'll hit the main action centre endpoint.
   const body = await apiGet<unknown>(`/api/v1/action-centre?${query.toString()}`)
@@ -1344,7 +1351,7 @@ function mapHumanAction(wrapper: unknown): HumanAction {
   return {
     id: asString(item.id),
     type,
-    status: mapHumanActionStatus(item.status),
+    status: mapHumanActionStatus(item.status, type),
     priority: String(item.priority ?? "normal") as HumanActionPriority,
     title,
     description: item.description ?? requestedAction?.description ?? item.decision_note ?? item.note,
@@ -1365,7 +1372,13 @@ function mapHumanAction(wrapper: unknown): HumanAction {
   }
 }
 
-function mapHumanActionStatus(value: unknown): HumanActionStatus {
+function mapHumanActionStatus(value: unknown, type: HumanActionType): HumanActionStatus {
+  if (type === "approval") {
+    if (value === "pending") return "open"
+    if (value === "approved" || value === "rejected") return "resolved"
+    if (value === "expired") return "expired"
+    throw new Error("Unsupported approval status")
+  }
   if (value === "pending" || value === "open") return "open"
   if (value === "claimed" || value === "assigned") return "claimed"
   if (value === "approved" || value === "rejected" || value === "answered" || value === "resolved") return "resolved"

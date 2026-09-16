@@ -184,4 +184,3 @@ export function DecisionPanel({ action }: { action: HumanAction }) {
     </div>
   )
 }
-

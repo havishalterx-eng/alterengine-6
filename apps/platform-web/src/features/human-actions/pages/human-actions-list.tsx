@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useNavigate } from "react-router-dom"
+import { approvalStatuses, type ApprovalStatus } from "@/api/types"
 import { api } from "@/api/client"
 import { queryKeys } from "@/api/query-keys"
 import { PageHeader } from "@/components/common/page-header"
@@ -41,12 +42,12 @@ function ActionPriorityBadge({ priority }: { priority: string }) {
 
 export function HumanActionsList() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = React.useState("open")
+  const [activeTab, setActiveTab] = React.useState<ApprovalStatus | "all">("pending")
   const [activeType, setActiveType] = React.useState<string>("all")
 
   const { data: actions, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.humanActions.list({ status: activeTab !== "all" ? activeTab : undefined }),
-    queryFn: () => (api as any).getHumanActions({ status: activeTab !== "all" ? activeTab : undefined })
+    queryFn: () => api.getHumanActions({ status: activeTab !== "all" ? activeTab : undefined })
   })
 
   const filteredActions = React.useMemo(() => {
@@ -80,11 +81,12 @@ export function HumanActionsList() {
       </div>
 
       <div className="flex-1 overflow-auto p-8 pt-0">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+        <Tabs value={activeTab} onValueChange={(value) => { if (value === "all" || approvalStatuses.some(status => status === value)) setActiveTab(value as ApprovalStatus | "all") }} className="mb-6">
           <TabsList>
-            <TabsTrigger value="open">Open</TabsTrigger>
-            <TabsTrigger value="claimed">Claimed</TabsTrigger>
-            <TabsTrigger value="resolved">Resolved</TabsTrigger>
+            <TabsTrigger value="pending">Pending</TabsTrigger>
+            <TabsTrigger value="approved">Approved</TabsTrigger>
+            <TabsTrigger value="rejected">Rejected</TabsTrigger>
+            <TabsTrigger value="expired">Expired</TabsTrigger>
             <TabsTrigger value="all">All</TabsTrigger>
           </TabsList>
         </Tabs>
