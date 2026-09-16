@@ -628,8 +628,8 @@ demo.
       missing from the *path*: `success_criteria` is decided at the top of the design path and
       never reaches the node that produces output or the gate that judges it. **Fix is to carry
       them down, not to add a per-node `output_schema`** — that would put a second judge of node
-      output beside the frozen Verification & Quality Gate (§7 pattern 4). Needs a decision on
-      scope before any build. Original finding: The Bedrock
+      output beside the frozen Verification & Quality Gate (§7 pattern 4). **Freeze exemption GRANTED 2026-09-16** for Graph Compiler, the
+      Executor and the Verification & Quality Gate, C29 only (see memoryalter). Prompt issued. Original finding: The Bedrock
       adapter wraps every response as `{message, stop_reason}` and the gateway passes it
       through as `output_json`, so `output_json` always parses and `MODEL_OUTPUT_INVALID` is
       unreachable on the real-provider path. **Prose, or an answer to a different question
