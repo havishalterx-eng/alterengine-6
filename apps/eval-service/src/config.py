@@ -1,6 +1,7 @@
 from functools import lru_cache
+from typing import Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # eval_db is created inside the engine-db cluster on 5433 by
@@ -14,6 +15,9 @@ DEFAULT_EVAL_DB_URL_SYNC = "postgresql+psycopg2://eval_service:eval_local@localh
 
 
 class Settings(BaseSettings):
+    runtime_mode: Literal["real", "mock"] = "mock"
+    alter_config_source: Literal["appconfig", "local-file"] = "local-file"
+    node_env: str = "development"
     eval_db_url_sync: str = DEFAULT_EVAL_DB_URL_SYNC
     grpc_bind_address: str = "0.0.0.0:50062"
     verification_grpc_target: str
@@ -58,6 +62,12 @@ class Settings(BaseSettings):
     auth0_m2m_client_id: str
     auth0_m2m_client_secret: str
     internal_service_token: str
+
+    @model_validator(mode="after")
+    def reject_mock_runtime_in_production(self) -> "Settings":
+        if self.runtime_mode == "mock" and self.node_env == "production":
+            raise ValueError("RUNTIME_MODE=mock is not allowed when NODE_ENV=production")
+        return self
 
     model_config = SettingsConfigDict(
         env_file=".env.local",

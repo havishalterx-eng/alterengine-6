@@ -19,6 +19,8 @@ describe("loadConversationManagerEnvironment", () => {
   it("validates and returns the documented local environment", () => {
     expect(loadConversationManagerEnvironment(environment())).toEqual({
       alterEnvironment: "local",
+      runtimeMode: "mock",
+      configSource: "local-file",
       modelGatewayAddress: "127.0.0.1:50051",
       grpcBindAddress: "0.0.0.0:50052",
     });

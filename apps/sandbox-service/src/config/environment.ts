@@ -1,14 +1,17 @@
+import { createEnvironmentValidators } from "@alterx/adapters";
+
 const ALTER_ENVIRONMENTS = ["local", "dev", "staging", "prod"] as const;
 
 interface SandboxEnvironmentBase {
   readonly alterEnvironment: (typeof ALTER_ENVIRONMENTS)[number];
   readonly region: "ap-south-1";
+  readonly runtimeMode: "real" | "mock";
   readonly grpcBindAddress: string;
   readonly artifactContentServiceAddress: string;
 }
 
 export interface SandboxMockEnvironment extends SandboxEnvironmentBase {
-  readonly configSource: "mock";
+  readonly configSource: "appconfig" | "local-file";
   readonly localMock: true;
 }
 
@@ -39,6 +42,10 @@ export type SandboxEnvironment =
   | SandboxMockEnvironment
   | SandboxAppConfigEnvironment;
 
+const { runtimeMode, configSource: readConfigSource } = createEnvironmentValidators(
+  (field, reason) => new Error(`${field} ${reason}`),
+);
+
 function required(environment: NodeJS.ProcessEnv, name: string): string {
   const value = environment[name]?.trim();
   if (!value) throw new Error(`${name} is required`);
@@ -62,25 +69,20 @@ export function loadSandboxEnvironment(
   if (required(environment, "ALTER_REGION") !== "ap-south-1") {
     throw new Error("ALTER_REGION must equal ap-south-1");
   }
+  const mode = runtimeMode(environment);
+  const source = readConfigSource(environment);
   const base = {
     alterEnvironment:
       alterEnvironment as SandboxEnvironment["alterEnvironment"],
     region: "ap-south-1" as const,
+    runtimeMode: mode,
     grpcBindAddress: grpcAddress(environment),
     artifactContentServiceAddress: required(environment, "ARTIFACT_CONTENT_SERVICE_ADDRESS"),
   };
-  const source = required(environment, "ALTER_CONFIG_SOURCE");
-  if (source === "mock") {
-    if (alterEnvironment !== "local" || environment.NODE_ENV === "production") {
-      throw new Error(
-        "Mock configuration is only allowed for local non-production runs",
-      );
-    }
-    return { ...base, configSource: "mock", localMock: true };
+  if (mode === "mock") {
+    return { ...base, configSource: source, localMock: true };
   }
-  if (source !== "appconfig") {
-    throw new Error("ALTER_CONFIG_SOURCE must be appconfig or mock");
-  }
+  if (source !== "appconfig") throw new Error("RUNTIME_MODE=real requires ALTER_CONFIG_SOURCE=appconfig");
   const appConfigBase = {
     ...base,
     configSource: "appconfig" as const,

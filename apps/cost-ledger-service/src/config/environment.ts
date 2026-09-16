@@ -5,6 +5,8 @@ const ALTER_ENVIRONMENTS = ["local", "dev", "staging", "prod"] as const;
 interface CostLedgerEnvironmentBase {
   readonly alterEnvironment: (typeof ALTER_ENVIRONMENTS)[number];
   readonly serviceName: "cost-ledger-service";
+  readonly runtimeMode: "real" | "mock";
+  readonly configSource: "appconfig" | "local-file";
   readonly httpPort: number;
   readonly grpcBindAddress: string;
   // Real cross-service dependency for OUT-4's workspace_id resolution
@@ -51,7 +53,7 @@ export class CostLedgerConfigurationError extends Error {
   }
 }
 
-const { requireValue, scopedValue, requireScopedValue, parsePort, parseRequiredPort, parseGrpcAddress } = createEnvironmentValidators(
+const { requireValue, scopedValue, requireScopedValue, parsePort, parseRequiredPort, parseGrpcAddress, runtimeMode, configSource: readConfigSource } = createEnvironmentValidators(
   (field, reason) => new CostLedgerConfigurationError(field, reason),
 );
 
@@ -111,9 +113,14 @@ export function loadCostLedgerEnvironment(
     );
   }
 
+  const mode = runtimeMode(environment);
+  const configSource = readConfigSource(environment);
+
   const baseEnvironment: CostLedgerEnvironmentBase = {
     alterEnvironment: alterEnvironment as CostLedgerEnvironment["alterEnvironment"],
     serviceName,
+    runtimeMode: mode,
+    configSource,
     httpPort: parsePort(scopedValue(environment, "COST_PORT", "PORT"), "COST_PORT", DEFAULT_HTTP_PORT),
     grpcBindAddress: parseGrpcAddress(
       environment.COST_GRPC_BIND_ADDRESS,

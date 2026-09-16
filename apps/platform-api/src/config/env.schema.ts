@@ -11,6 +11,7 @@ export const platformApiEnvSchema = z
     REDIS_ENDPOINT_PARAM: z.string().optional(),
     // Production DB wiring resolves through SecretsProvider in a later ticket.
     DATABASE_SECRET_REF: z.string().optional(),
+    NODE_ENV: z.string().optional(),
     IDENTITY_PROVIDER: z.enum(["auth0", "google", "mock"]).default("mock"),
     AUTH0_DOMAIN: z.string().min(1).optional(),
     AUTH0_CLIENT_ID: z.string().min(1).optional(),
@@ -24,6 +25,7 @@ export const platformApiEnvSchema = z
     SES_FROM_ADDRESS: z.string().min(1).optional(),
     SES_CREDENTIALS_SECRET_REF: z.string().min(1).optional(),
     SIGNING_KEY_PROVIDER: z.enum(["secrets", "mock"]).default("secrets"),
+    RUNTIME_MODE: z.enum(["real", "mock"]).default("mock"),
     ACTOR_TOKEN_SIGNING_KEY_REF: z.string().min(1).optional(),
     ALTER_CONFIG_SOURCE: z.enum(["appconfig", "local-file"]).default("local-file"),
     APPCONFIG_APP_ID: z.string().min(1).optional(),
@@ -72,6 +74,13 @@ export const platformApiEnvSchema = z
     REGISTRY_SCAN_PROVIDER: z.enum(["sandbox", "mock"]).default("mock"),
   })
   .superRefine((env, context) => {
+    if (env.RUNTIME_MODE === "mock" && env.NODE_ENV === "production") {
+      context.addIssue({
+        code: "custom",
+        path: ["RUNTIME_MODE"],
+        message: "RUNTIME_MODE=mock is not allowed when NODE_ENV=production",
+      });
+    }
     if (env.SIGNING_KEY_PROVIDER === "secrets" && !env.ACTOR_TOKEN_SIGNING_KEY_REF) {
       context.addIssue({
         code: "custom",
@@ -175,7 +184,7 @@ function requireFields<
 export type PlatformApiEnv = z.infer<typeof platformApiEnvSchema>;
 
 export function platformApiConfigSource(env: NodeJS.ProcessEnv): string | undefined {
-  return env.PLATFORM_API_CONFIG_SOURCE?.trim() || env.ALTER_CONFIG_SOURCE?.trim();
+  return env.ALTER_CONFIG_SOURCE?.trim();
 }
 
 // The canonical AppConfig identifier names are the long forms

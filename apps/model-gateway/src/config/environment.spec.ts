@@ -8,14 +8,19 @@ import {
 function environment(
   overrides: NodeJS.ProcessEnv = {},
 ): NodeJS.ProcessEnv {
-  return {
+  const merged = {
     ALTER_ENV: "local",
     ALTER_SERVICE_NAME: "model-gateway",
     ALTER_REGION: "ap-south-1",
-    ALTER_CONFIG_SOURCE: "mock",
+    RUNTIME_MODE: "mock",
+    ALTER_CONFIG_SOURCE: "local-file",
     COST_LEDGER_GRPC_ADDRESS: "localhost:50060",
     ...overrides,
   };
+  if (overrides.ALTER_CONFIG_SOURCE === "appconfig" && overrides.RUNTIME_MODE === undefined) {
+    merged.RUNTIME_MODE = "real";
+  }
+  return merged;
 }
 
 describe("loadModelGatewayEnvironment", () => {
@@ -24,7 +29,8 @@ describe("loadModelGatewayEnvironment", () => {
       alterEnvironment: "local",
       serviceName: "model-gateway",
       region: "ap-south-1",
-      configSource: "mock",
+      runtimeMode: "mock",
+      configSource: "local-file",
       embeddingProvider: "mock",
       httpPort: 3023,
       grpcBindAddress: "0.0.0.0:50051",
@@ -77,10 +83,10 @@ describe("loadModelGatewayEnvironment", () => {
     });
   });
 
-  it("rejects the mock config source outside local", () => {
+  it("rejects the retired mock config source", () => {
     expect(() =>
-      loadModelGatewayEnvironment(environment({ ALTER_ENV: "dev" })),
-    ).toThrow(/mock config source is only permitted/);
+      loadModelGatewayEnvironment(environment({ ALTER_CONFIG_SOURCE: "mock" })),
+    ).toThrow(/must be one of appconfig, local-file/);
   });
 
   it("requires an explicit Bedrock endpoint when AWS has a global endpoint override", () => {
@@ -126,7 +132,8 @@ describe("loadModelGatewayEnvironment", () => {
         }),
       ),
     ).toMatchObject({
-      configSource: "mock",
+      configSource: "local-file",
+      runtimeMode: "mock",
       embeddingProvider: "titan",
       bedrockRuntimeEndpoint: "https://bedrock-runtime.ap-south-1.amazonaws.com",
     });
@@ -168,12 +175,12 @@ describe("loadModelGatewayEnvironment", () => {
     ).toThrow(/MODEL_GATEWAY_EMBEDDING_PROVIDER/);
   });
 
-  it("rejects the mock config source when NODE_ENV is production, even if ALTER_ENV is local", () => {
+  it("rejects mock runtime mode when NODE_ENV is production", () => {
     expect(() =>
       loadModelGatewayEnvironment(
         environment({ NODE_ENV: "production" }),
       ),
-    ).toThrow(/cannot be selected when NODE_ENV is production/);
+    ).toThrow(/mock is not allowed when NODE_ENV is production/);
   });
 
   it.each([undefined, "test", "development"])(
@@ -183,7 +190,7 @@ describe("loadModelGatewayEnvironment", () => {
         loadModelGatewayEnvironment(
           environment({ NODE_ENV: nodeEnvironment }),
         ),
-      ).toMatchObject({ configSource: "mock" });
+      ).toMatchObject({ configSource: "local-file", runtimeMode: "mock" });
     },
   );
 
@@ -314,6 +321,8 @@ describe("loadModelGatewayEnvironment", () => {
   // this is the service that has to say "appconfig" while sandbox,
   // provisioning and tool-gateway are still on the local mocks.
   const appConfigOverrides = {
+    ALTER_CONFIG_SOURCE: "appconfig",
+    RUNTIME_MODE: "real",
     MODEL_GATEWAY_CONFIG_SOURCE: "appconfig",
     APPCONFIG_APPLICATION_ID: "app-1",
     APPCONFIG_ENVIRONMENT_ID: "env-1",
@@ -327,17 +336,22 @@ describe("loadModelGatewayEnvironment", () => {
     CACHE_REDIS_PORT: "6379",
   } as const;
 
-  it("prefers MODEL_GATEWAY_CONFIG_SOURCE over the shared value", () => {
+  it("ignores retired MODEL_GATEWAY_CONFIG_SOURCE overrides", () => {
     expect(
       loadModelGatewayEnvironment(
-        environment({ ...appConfigOverrides, ALTER_CONFIG_SOURCE: "mock" }),
+        environment({
+          ALTER_CONFIG_SOURCE: "local-file",
+          RUNTIME_MODE: "mock",
+          MODEL_GATEWAY_CONFIG_SOURCE: "appconfig",
+        }),
       ),
-    ).toMatchObject({ configSource: "appconfig" });
+    ).toMatchObject({ configSource: "local-file", runtimeMode: "mock" });
   });
 
   it("still reads ALTER_CONFIG_SOURCE when the scoped name is absent", () => {
     expect(loadModelGatewayEnvironment(environment())).toMatchObject({
-      configSource: "mock",
+      configSource: "local-file",
+      runtimeMode: "mock",
     });
   });
 

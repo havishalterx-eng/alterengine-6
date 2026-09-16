@@ -29,7 +29,7 @@ import { OperationalConfigProvider } from "./operations/operational-config-provi
  * Real, disclosed eval-only entrypoint -- NOT apps/model-gateway's
  * production entrypoint (see main.ts for that). Every provider except the
  * model provider is the same real mock this service's own sanctioned
- * `ALTER_CONFIG_SOURCE=mock` / `ALTER_ENV=local` combination already uses
+ * `RUNTIME_MODE=mock` / `ALTER_ENV=local` combination already uses
  * (see config/environment.ts's own validation: mock is only permitted
  * when ALTER_ENV=local and NODE_ENV!=production -- this script reuses
  * that exact real gate via loadModelGatewayEnvironment, not a parallel
@@ -65,9 +65,9 @@ function createEvalModelProvider(): ModelProvider {
 
 async function bootstrap(): Promise<void> {
   const environment = loadModelGatewayEnvironment(process.env);
-  if (environment.configSource !== "mock") {
+  if (environment.runtimeMode !== "mock") {
     throw new Error(
-      "eval_bootstrap only supports ALTER_CONFIG_SOURCE=mock -- use main.ts for a real " +
+      "eval_bootstrap only supports RUNTIME_MODE=mock -- use main.ts for a real " +
         "AWS AppConfig-backed deployment.",
     );
   }

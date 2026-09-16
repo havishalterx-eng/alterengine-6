@@ -6,32 +6,36 @@ const BASE = {
   ALTER_ENV: "local",
   ALTER_SERVICE_NAME: "sandbox-service",
   ALTER_REGION: "ap-south-1",
-  ALTER_CONFIG_SOURCE: "mock",
+  RUNTIME_MODE: "mock",
+  ALTER_CONFIG_SOURCE: "local-file",
   ARTIFACT_CONTENT_SERVICE_ADDRESS: "orchestration-service:50061",
 };
 
 describe("loadSandboxEnvironment", () => {
-  it("allows mock providers only in local non-production mode", () => {
+  it("allows mock providers outside production", () => {
     expect(loadSandboxEnvironment(BASE)).toEqual({
       alterEnvironment: "local",
       region: "ap-south-1",
+      runtimeMode: "mock",
       grpcBindAddress: "0.0.0.0:50057",
       artifactContentServiceAddress: "orchestration-service:50061",
-      configSource: "mock",
+      configSource: "local-file",
       localMock: true,
     });
     expect(() =>
       loadSandboxEnvironment({ ...BASE, NODE_ENV: "production" }),
-    ).toThrow("local non-production");
-    expect(() =>
-      loadSandboxEnvironment({ ...BASE, ALTER_ENV: "dev" }),
-    ).toThrow("local non-production");
+    ).toThrow(/RUNTIME_MODE/);
+    expect(loadSandboxEnvironment({ ...BASE, ALTER_ENV: "dev" })).toMatchObject({
+      runtimeMode: "mock",
+      localMock: true,
+    });
   });
 
   it("requires all real provider references without resolving secret values", () => {
     const environment = loadSandboxEnvironment({
       ...BASE,
       ALTER_ENV: "prod",
+      RUNTIME_MODE: "real",
       ALTER_CONFIG_SOURCE: "appconfig",
       APPCONFIG_APPLICATION_ID: "app-id",
       APPCONFIG_ENVIRONMENT_ID: "env-id",
@@ -56,6 +60,7 @@ describe("loadSandboxEnvironment", () => {
     const environment = loadSandboxEnvironment({
       ...BASE,
       ALTER_ENV: "prod",
+      RUNTIME_MODE: "real",
       ALTER_CONFIG_SOURCE: "appconfig",
       APPCONFIG_APPLICATION_ID: "app-id",
       APPCONFIG_ENVIRONMENT_ID: "env-id",
@@ -75,6 +80,7 @@ describe("loadSandboxEnvironment", () => {
       loadSandboxEnvironment({
         ...BASE,
         ALTER_ENV: "prod",
+        RUNTIME_MODE: "real",
         ALTER_CONFIG_SOURCE: "appconfig",
         APPCONFIG_APPLICATION_ID: "app-id",
         APPCONFIG_ENVIRONMENT_ID: "env-id",

@@ -1,5 +1,9 @@
+import { createEnvironmentValidators } from "@alterx/adapters";
+
 export interface ProvisioningEnvironment {
   readonly localMock: boolean;
+  readonly runtimeMode: "real" | "mock";
+  readonly configSource: "appconfig" | "local-file";
   readonly region: "ap-south-1";
   readonly grpcBindAddress: string;
   readonly e2bApiKeyReference?: string;
@@ -21,25 +25,33 @@ function parseGrpcBindAddress(value: string | undefined): string {
   return address;
 }
 
+const { runtimeMode, configSource: readConfigSource } = createEnvironmentValidators(
+  (field, reason) => new Error(`${field} ${reason}`),
+);
+
 export function loadProvisioningEnvironment(environment: NodeJS.ProcessEnv): ProvisioningEnvironment {
   const alterEnvironment = required(environment, "ALTER_ENV");
   if (!(["local", "dev", "staging", "prod"] as const).includes(alterEnvironment as "local")) throw new Error("ALTER_ENV is invalid");
   if (required(environment, "ALTER_SERVICE_NAME") !== "provisioning-service") throw new Error("ALTER_SERVICE_NAME must equal provisioning-service");
   if (required(environment, "ALTER_REGION") !== "ap-south-1") throw new Error("ALTER_REGION must equal ap-south-1");
-  const source = required(environment, "ALTER_CONFIG_SOURCE");
-  if (source === "mock") {
-    if (alterEnvironment !== "local" || environment.NODE_ENV === "production") throw new Error("Mock configuration is only allowed for local non-production runs");
+  const mode = runtimeMode(environment);
+  const source = readConfigSource(environment);
+  if (mode === "mock") {
     return {
       localMock: true,
+      runtimeMode: mode,
+      configSource: source,
       region: "ap-south-1",
       grpcBindAddress: parseGrpcBindAddress(
         environment.PROVISIONING_GRPC_BIND_ADDRESS,
       ),
     };
   }
-  if (source !== "appconfig") throw new Error("ALTER_CONFIG_SOURCE must be appconfig or mock");
+  if (source !== "appconfig") throw new Error("RUNTIME_MODE=real requires ALTER_CONFIG_SOURCE=appconfig");
   return {
     localMock: false,
+    runtimeMode: mode,
+    configSource: source,
     region: "ap-south-1",
     grpcBindAddress: parseGrpcBindAddress(
       environment.PROVISIONING_GRPC_BIND_ADDRESS,

@@ -6,6 +6,7 @@ interface ModelGatewayEnvironmentBase {
   readonly alterEnvironment: (typeof ALTER_ENVIRONMENTS)[number];
   readonly serviceName: "model-gateway";
   readonly region: "ap-south-1";
+  readonly runtimeMode: "real" | "mock";
   readonly httpPort: number;
   readonly grpcBindAddress: string;
   readonly costLedgerGrpcAddress: string;
@@ -13,6 +14,7 @@ interface ModelGatewayEnvironmentBase {
 
 export interface ModelGatewayAppConfigEnvironment
   extends ModelGatewayEnvironmentBase {
+  readonly runtimeMode: "real";
   readonly configSource: "appconfig";
   readonly appConfigApplicationId: string;
   readonly appConfigEnvironmentId: string;
@@ -31,7 +33,8 @@ export interface ModelGatewayAppConfigEnvironment
 
 export interface ModelGatewayMockEnvironment
   extends ModelGatewayEnvironmentBase {
-  readonly configSource: "mock";
+  readonly runtimeMode: "mock";
+  readonly configSource: "appconfig" | "local-file";
   readonly embeddingProvider: "mock" | "titan";
   readonly bedrockRuntimeEndpoint?: string;
 }
@@ -47,7 +50,7 @@ export class ModelGatewayConfigurationError extends Error {
   }
 }
 
-const { requireValue, scopedValue, requireScopedValue, parsePort, parseRequiredPort, parseGrpcAddress } =
+const { requireValue, scopedValue, parsePort, parseRequiredPort, parseGrpcAddress, runtimeMode, configSource: readConfigSource } =
   createEnvironmentValidators((field, reason) => new ModelGatewayConfigurationError(field, reason));
 
 /**
@@ -103,27 +106,12 @@ export function loadModelGatewayEnvironment(
   // one shared env file cannot hold two values, and this is the service that
   // needs "appconfig" while sandbox, provisioning and tool-gateway are still
   // running against the local mocks.
-  const configSource = requireScopedValue(
-    environment,
-    "MODEL_GATEWAY_CONFIG_SOURCE",
-    "ALTER_CONFIG_SOURCE",
-  );
-  if (configSource !== "appconfig" && configSource !== "mock") {
+  const mode = runtimeMode(environment);
+  const configSource = readConfigSource(environment);
+  if (mode === "real" && configSource !== "appconfig") {
     throw new ModelGatewayConfigurationError(
       "ALTER_CONFIG_SOURCE",
-      "must be one of appconfig, mock",
-    );
-  }
-  if (configSource === "mock" && alterEnvironment !== "local") {
-    throw new ModelGatewayConfigurationError(
-      "ALTER_CONFIG_SOURCE",
-      "mock config source is only permitted when ALTER_ENV is local",
-    );
-  }
-  if (configSource === "mock" && environment.NODE_ENV === "production") {
-    throw new ModelGatewayConfigurationError(
-      "ALTER_CONFIG_SOURCE",
-      "mock config source cannot be selected when NODE_ENV is production",
+      "RUNTIME_MODE=real requires ALTER_CONFIG_SOURCE=appconfig",
     );
   }
 
@@ -164,6 +152,7 @@ export function loadModelGatewayEnvironment(
       alterEnvironment as ModelGatewayEnvironment["alterEnvironment"],
     serviceName,
     region,
+    runtimeMode: mode,
     httpPort: parsePort(scopedValue(environment, "MODEL_GATEWAY_PORT", "PORT"), "MODEL_GATEWAY_PORT", 3023),
     grpcBindAddress: parseGrpcAddress(
       scopedValue(environment, "MODEL_GATEWAY_GRPC_BIND_ADDRESS", "GRPC_BIND_ADDRESS"),
@@ -181,10 +170,11 @@ export function loadModelGatewayEnvironment(
     ),
   };
 
-  if (configSource === "mock") {
+  if (mode === "mock") {
     return {
       ...baseEnvironment,
-      configSource: "mock",
+      runtimeMode: "mock",
+      configSource,
       embeddingProvider,
       ...(bedrockRuntimeEndpoint === undefined
         ? {}
@@ -194,6 +184,7 @@ export function loadModelGatewayEnvironment(
 
   return {
     ...baseEnvironment,
+    runtimeMode: "real",
     configSource: "appconfig",
     appConfigApplicationId: requireValue(
       environment,

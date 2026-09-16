@@ -9,6 +9,8 @@ const ALTER_ENVIRONMENTS = ["local", "dev", "staging", "prod"] as const;
 
 export interface ConversationManagerEnvironment {
   readonly alterEnvironment: (typeof ALTER_ENVIRONMENTS)[number];
+  readonly runtimeMode: "real" | "mock";
+  readonly configSource: "appconfig" | "local-file";
   readonly modelGatewayAddress: string;
   readonly grpcBindAddress: string;
 }
@@ -20,7 +22,7 @@ export class ConversationManagerConfigurationError extends Error {
   }
 }
 
-const { requireValue, parseGrpcAddress } = createEnvironmentValidators(
+const { requireValue, parseGrpcAddress, runtimeMode, configSource: readConfigSource } = createEnvironmentValidators(
   (field, reason) => new ConversationManagerConfigurationError(field, reason),
 );
 
@@ -42,6 +44,8 @@ export function loadConversationManagerEnvironment(
   return {
     alterEnvironment:
       alterEnvironment as ConversationManagerEnvironment["alterEnvironment"],
+    runtimeMode: runtimeMode(environment),
+    configSource: readConfigSource(environment),
     modelGatewayAddress: requireValue(environment, "MODEL_GATEWAY_ADDRESS"),
     grpcBindAddress: parseGrpcAddress(
       environment.CONVERSATION_GRPC_BIND_ADDRESS,

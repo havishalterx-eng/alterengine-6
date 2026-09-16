@@ -47,7 +47,7 @@ type ToolGatewayEnvironment = ReturnType<typeof loadToolGatewayEnvironment>;
 function createConfigProvider(
   environment: ToolGatewayEnvironment,
 ): ConfigProvider {
-  if (environment.configSource === "mock") {
+  if (environment.runtimeMode === "mock") {
     return createMockConfigProvider();
   }
   return new AwsAppConfigConfigProvider({
@@ -61,7 +61,7 @@ function createConfigProvider(
 function createSecretsProvider(
   environment: ToolGatewayEnvironment,
 ): SecretsProvider {
-  if (environment.configSource === "mock") {
+  if (environment.runtimeMode === "mock") {
     return createMockSecretsProvider();
   }
   return new AwsSecretsManagerProvider({ region: environment.region });
@@ -71,7 +71,7 @@ async function createSearchProvider(
   environment: ToolGatewayEnvironment,
   secretsProvider: SecretsProvider,
 ): Promise<SearchProvider> {
-  if (environment.configSource === "mock") {
+  if (environment.runtimeMode === "mock") {
     return createMockSearchProvider();
   }
   const apiKey = await secretsProvider.getSecret(
@@ -83,7 +83,7 @@ async function createSearchProvider(
 function createAuditClient(
   environment: ToolGatewayEnvironment,
 ): AuditEventHandler {
-  if (environment.configSource === "mock") {
+  if (environment.runtimeMode === "mock") {
     return createMockAuditEventHandler();
   }
   return new AuditServiceClient({
@@ -94,7 +94,7 @@ function createAuditClient(
 }
 
 function createQueueProvider(environment: ToolGatewayEnvironment): QueueProvider {
-  return environment.configSource === "mock"
+  return environment.runtimeMode === "mock"
     ? createMockQueueProvider()
     : new SqsQueueProvider({
         region: environment.region,
@@ -105,7 +105,7 @@ function createQueueProvider(environment: ToolGatewayEnvironment): QueueProvider
 }
 
 function createCacheProvider(environment: ToolGatewayEnvironment): CacheProvider {
-  if (environment.configSource === "mock") {
+  if (environment.runtimeMode === "mock") {
     return createMockCacheProvider();
   }
   return new RedisCacheProvider({
@@ -126,7 +126,7 @@ async function createBrowserProvider(
   secretsProvider: SecretsProvider,
   urlFetcher: SsrfGuardedFetcher,
 ): Promise<BrowserAutomationProvider> {
-  if (environment.configSource === "mock") {
+  if (environment.runtimeMode === "mock") {
     return new MockBrowserAutomationProvider(urlFetcher);
   }
   return new BrowserbasePlaywrightProvider(
@@ -147,7 +147,7 @@ async function createBrowserProvider(
 // uses, driven by the same EMAIL_PROVIDER/SES_FROM_ADDRESS/
 // SES_CREDENTIALS_SECRET_REF/NODE_ENV environment variables in both
 // services -- not gated behind this service's own
-// ALTER_CONFIG_SOURCE=mock switch, so both services make the identical
+// RUNTIME_MODE=mock switch, so both services make the identical
 // mock-vs-real decision from the identical configuration rather than
 // tool-gateway inventing a second, parallel one.
 function createEmailProvider(secretsProvider: SecretsProvider): EmailProvider {

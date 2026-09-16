@@ -172,12 +172,12 @@ export class ToolGatewayService implements ToolgwHandler {
     // ENGINE-RESTRUCTURE-P4-1b: the real browser automation provider
     // (BrowserbasePlaywrightProvider in production, constructed in main.ts
     // exactly like sandbox-service's createBrowserProvider did; mock under
-    // ALTER_CONFIG_SOURCE=mock). Its API key is resolved once here at
+    // RUNTIME_MODE=mock). Its API key is resolved once here at
     // startup from platform-wide config -- never per call.
     private readonly browserProvider: BrowserAutomationProvider,
     // email.send: the real EmailProvider (SesEmailProvider in production,
     // constructed in main.ts via the shared resolveEmailProvider(); mock
-    // under ALTER_CONFIG_SOURCE=mock). Its SES identity is resolved once
+    // under RUNTIME_MODE=mock). Its SES identity is resolved once
     // here at startup from platform-wide config -- never per call, same
     // treatment as browserProvider above.
     private readonly emailProvider: EmailProvider,

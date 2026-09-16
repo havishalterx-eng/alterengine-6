@@ -5,6 +5,8 @@ import { createEnvironmentValidators } from "@alterx/adapters";
 // this ticket must not perturb any other ticket's wiring.
 
 export interface ExecutorWorkerEnvironment {
+  readonly runtimeMode: "real" | "mock";
+  readonly configSource: "appconfig" | "local-file";
   readonly temporalAddress: string;
   readonly temporalNamespace: string;
   readonly temporalApiKey: string | undefined;
@@ -20,14 +22,17 @@ export class ExecutorWorkerConfigurationError extends Error {
   }
 }
 
-const { requireValue } = createEnvironmentValidators(
+const { requireValue, runtimeMode, configSource: readConfigSource } = createEnvironmentValidators(
   (field, reason) => new ExecutorWorkerConfigurationError(field, reason),
 );
 
 export function loadExecutorWorkerEnvironment(
   environment: NodeJS.ProcessEnv,
 ): ExecutorWorkerEnvironment {
+  const mode = runtimeMode(environment);
   return {
+    runtimeMode: mode,
+    configSource: readConfigSource(environment),
     temporalAddress: requireValue(environment, "TEMPORAL_ADDRESS"),
     temporalNamespace: requireValue(environment, "TEMPORAL_NAMESPACE"),
     temporalApiKey: environment.TEMPORAL_API_KEY?.trim() || undefined,

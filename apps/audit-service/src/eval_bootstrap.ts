@@ -13,7 +13,7 @@ import { AUDIT_MIGRATIONS_PATH } from "./database/migrations-path";
  * Real, disclosed eval-only entrypoint -- NOT audit-service's production
  * main.ts. Production always requires real AWS Secrets Manager access
  * (for the database connection string AND the deletion secrets), with no
- * ALTER_CONFIG_SOURCE=mock escape hatch like model-gateway/tool-gateway
+ * RUNTIME_MODE=mock escape hatch like model-gateway/tool-gateway
  * have. This script bypasses only that: a real PostgresAuditStoreProvider
  * built from a plain static connection string env var, and
  * AppModule.register(store) with no deletion wiring (deletion is

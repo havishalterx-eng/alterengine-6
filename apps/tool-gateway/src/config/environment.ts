@@ -6,12 +6,14 @@ interface ToolGatewayEnvironmentBase {
   readonly alterEnvironment: (typeof ALTER_ENVIRONMENTS)[number];
   readonly serviceName: "tool-gateway";
   readonly region: "ap-south-1";
+  readonly runtimeMode: "real" | "mock";
   readonly httpPort: number;
   readonly grpcBindAddress: string;
 }
 
 export interface ToolGatewayAppConfigEnvironment
   extends ToolGatewayEnvironmentBase {
+  readonly runtimeMode: "real";
   readonly configSource: "appconfig";
   readonly appConfigApplicationId: string;
   readonly appConfigEnvironmentId: string;
@@ -28,7 +30,8 @@ export interface ToolGatewayAppConfigEnvironment
 
 export interface ToolGatewayMockEnvironment
   extends ToolGatewayEnvironmentBase {
-  readonly configSource: "mock";
+  readonly runtimeMode: "mock";
+  readonly configSource: "appconfig" | "local-file";
 }
 
 export type ToolGatewayEnvironment =
@@ -42,7 +45,7 @@ export class ToolGatewayConfigurationError extends Error {
   }
 }
 
-const { requireValue, scopedValue, parsePort, parseRequiredPort, parseGrpcAddress } =
+const { requireValue, scopedValue, parsePort, parseRequiredPort, parseGrpcAddress, runtimeMode, configSource: readConfigSource } =
   createEnvironmentValidators((field, reason) => new ToolGatewayConfigurationError(field, reason));
 
 export function loadToolGatewayEnvironment(
@@ -79,23 +82,12 @@ export function loadToolGatewayEnvironment(
     );
   }
 
-  const configSource = requireValue(environment, "ALTER_CONFIG_SOURCE");
-  if (configSource !== "appconfig" && configSource !== "mock") {
+  const mode = runtimeMode(environment);
+  const configSource = readConfigSource(environment);
+  if (mode === "real" && configSource !== "appconfig") {
     throw new ToolGatewayConfigurationError(
       "ALTER_CONFIG_SOURCE",
-      "must be one of appconfig, mock",
-    );
-  }
-  if (configSource === "mock" && alterEnvironment !== "local") {
-    throw new ToolGatewayConfigurationError(
-      "ALTER_CONFIG_SOURCE",
-      "mock config source is only permitted when ALTER_ENV is local",
-    );
-  }
-  if (configSource === "mock" && environment.NODE_ENV === "production") {
-    throw new ToolGatewayConfigurationError(
-      "ALTER_CONFIG_SOURCE",
-      "mock config source cannot be selected when NODE_ENV is production",
+      "RUNTIME_MODE=real requires ALTER_CONFIG_SOURCE=appconfig",
     );
   }
 
@@ -104,6 +96,7 @@ export function loadToolGatewayEnvironment(
       alterEnvironment as ToolGatewayEnvironment["alterEnvironment"],
     serviceName,
     region,
+    runtimeMode: mode,
     httpPort: parsePort(scopedValue(environment, "TOOL_GATEWAY_PORT", "PORT"), "TOOL_GATEWAY_PORT", 3024),
     // 50053 is the address every consumer is configured to reach
     // (TOOL_GATEWAY_ADDRESS); the previous default of 50052 was the
@@ -115,12 +108,13 @@ export function loadToolGatewayEnvironment(
     ),
   };
 
-  if (configSource === "mock") {
-    return { ...baseEnvironment, configSource: "mock" };
+  if (mode === "mock") {
+    return { ...baseEnvironment, runtimeMode: "mock", configSource };
   }
 
   return {
     ...baseEnvironment,
+    runtimeMode: "real",
     configSource: "appconfig",
     appConfigApplicationId: requireValue(
       environment,
