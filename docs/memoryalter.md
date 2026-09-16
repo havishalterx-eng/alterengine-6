@@ -391,6 +391,35 @@ component, the builder **stops and reports** rather than extending this exemptio
 
 **Decided by.** Havish, explicitly, naming all three.
 
+### 2026-09-16 — criteria are global at intake, and slice 1 proved it by carrying them
+
+- **What.** C29 slice 1 landed (PR #14): success criteria now travel `ProblemSpec` to skeleton to
+  architecture to compiled DAG to stored version, and workflows without criteria still compile.
+  Building it surfaced the thing nobody had costed: **intake criteria are global to the problem,
+  so slice 1 copies the same list onto every node.**
+- **Why that blocks slice 2 rather than merely annoying it.** Design log §5.2 requires the
+  semantic check to compare a node's output against **that node's own assigned sub-task**. A
+  global list copied everywhere cannot satisfy it — every node would be judged against every
+  criterion, so a node that did its own job perfectly fails on criteria belonging to other
+  nodes, and the check is worse than useless because it fails loudly and wrongly.
+- **Decision: the Planner assigns criteria during decomposition.** Each intake criterion is
+  assigned to one or more task nodes, explicitly, as part of producing the skeleton. The
+  original global list is retained unchanged for §5.3's end-of-run holistic check, which
+  compares the combined outcome against what the user actually asked for. **No auto-splitting
+  or copying heuristic** — a guessed assignment is indistinguishable from a wrong one, and the
+  whole point is that a node knows its own job.
+- **Two additions from attacking the builder's version of this.**
+  1. **An intake criterion that maps to no node must fail loudly, not be dropped.** It means the
+     plan does not cover something the user stated, which is a genuine planning defect and one
+     of the more valuable signals the engine could produce. §5.5 fail-closed applies.
+  2. **Task 4.1's Planner rewrite must inherit this.** The Planner is Category 4 and is being
+     replaced; building assignment into today's keyword-matching version and forgetting to carry
+     it is the obvious way to lose it. Recorded here so 4.1's prompt carries it.
+- **Slice 2 is unblocked by this decision and not by any code.** Nothing was built while it was
+  open, which is correct: the builder reported and stopped rather than inventing a rule.
+- **When.** 2026-09-16.
+- **Where.** `apps/intelligence-service/src/planner/`, design log §5.2 and §5.3.
+
 ---
 
 ## 3. Checklist context

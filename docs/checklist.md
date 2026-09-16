@@ -628,7 +628,7 @@ demo.
       missing from the *path*: `success_criteria` is decided at the top of the design path and
       never reaches the node that produces output or the gate that judges it. **Fix is to carry
       them down, not to add a per-node `output_schema`** — that would put a second judge of node
-      output beside the frozen Verification & Quality Gate (§7 pattern 4). **Freeze exemption GRANTED 2026-09-16** for Graph Compiler, the
+      output beside the frozen Verification & Quality Gate (§7 pattern 4). **Slice 1 MERGED 2026-09-16 (PR #14)** — criteria carry from ProblemSpec to the stored version, legacy workflows unaffected. **Slice 2 scope grew:** the Planner must assign criteria per node during decomposition (see memoryalter 2026-09-16); a criterion matching no node fails loudly. **Freeze exemption GRANTED 2026-09-16** for Graph Compiler, the
       Executor and the Verification & Quality Gate, C29 only (see memoryalter). Prompt issued. Original finding: The Bedrock
       adapter wraps every response as `{message, stop_reason}` and the gateway passes it
       through as `output_json`, so `output_json` always parses and `MODEL_OUTPUT_INVALID` is

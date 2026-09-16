@@ -58,6 +58,7 @@ Format: `YYYY-MM-DD · task · what was demonstrated · who verified`
 - `2026-09-16 · C22 · bootstrap-env-local.sh no longer generates LocalStack test/test AWS credentials at all, and verify_file() rejects them if present by any path · verified by the added regression, guard rejects then a clean env passes`
 - `2026-09-16 · C23 · stack health check now compares response-body service identity, not just HTTP 200 · verified live against two service processes deliberately bound to swapped ports, both correctly caught`
 - `2026-09-16 · C25 · answered, not a gap: 21 project targets already have real per-project lint (ESLint/Ruff/Oxlint); no root eslint.config needed`
+- `2026-09-16 · C29 slice 1 · success criteria carry ProblemSpec to skeleton to architecture to compiled DAG to stored version; workflows without criteria still compile · PR #14 merged, CI green on the merged sha (7fc6fab), proven to fail by removing the carry`
 
 ---
 
