@@ -8,7 +8,7 @@ format itself; the proto only cares about the serialised string.
 
 import json
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class TaskNode(BaseModel):
@@ -18,6 +18,16 @@ class TaskNode(BaseModel):
     type: str  # "llm" | "tool" | "branch" | "join"
     config: dict[str, object] = Field(default_factory=dict)
     depends_on: list[str] = Field(default_factory=list)
+    success_criteria: list[str] | None = None
+
+    @field_validator("success_criteria")
+    @classmethod
+    def _validate_success_criteria(cls, criteria: list[str] | None) -> list[str] | None:
+        if criteria is not None and (
+            not criteria or any(not criterion.strip() for criterion in criteria)
+        ):
+            raise ValueError("success_criteria must contain non-empty strings")
+        return criteria
 
 
 class TaskSkeleton(BaseModel):
@@ -28,7 +38,7 @@ class TaskSkeleton(BaseModel):
     entry_point: str
 
     def to_json(self) -> str:
-        return self.model_dump_json()
+        return self.model_dump_json(exclude_none=True)
 
     @classmethod
     def from_json(cls, raw: str) -> "TaskSkeleton":

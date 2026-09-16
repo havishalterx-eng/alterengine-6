@@ -178,6 +178,20 @@ async def test_output_is_stable_and_preserves_dependencies() -> None:
     assert first.nodes[1].depends_on == ["alpha"]
 
 
+@pytest.mark.asyncio
+async def test_carries_node_success_criteria_into_architecture() -> None:
+    result = await ArchitectureSynthesizer(Registry()).synthesize(request([
+        TaskNode(
+            key="one",
+            type="llm",
+            success_criteria=["The response answers the requested question."],
+        )
+    ]))
+
+    assert isinstance(result, ArchitectureSpec)
+    assert result.nodes[0].success_criteria == ["The response answers the requested question."]
+
+
 def test_registry_eligibility_filters_availability_capacity_and_constraints() -> None:
     record = CapabilityRecord.model_validate(
         {
