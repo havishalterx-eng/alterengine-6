@@ -24,7 +24,7 @@ from .models import (
 )
 from .project_strategy import build_project_skeleton
 from .strategies import STRATEGY_MANAGER_WORKER, STRATEGY_PLAN_THEN_EXECUTE, select_strategy
-from .task_skeleton import TaskSkeleton
+from .task_skeleton import TaskSkeleton, retain_and_validate_criteria
 
 
 class PlannerValidationError(ValueError):
@@ -52,11 +52,14 @@ class PlannerKernel:
 
     async def decompose(self, request: DecomposeRequest) -> DecomposeResponse:
         problem_spec = request.problem_spec
+        criteria = list(problem_spec.success_criteria)
 
         if request.strategy == STRATEGY_PLAN_THEN_EXECUTE:
             # Project-mode: fixed 14-stage build pipeline, no LLM call needed
             # to decide the skeleton shape (see project_strategy.py).
-            skeleton = build_project_skeleton(request.problem_spec_json)
+            skeleton = build_project_skeleton(
+                request.problem_spec_json, success_criteria=criteria
+            )
         elif request.strategy == STRATEGY_MANAGER_WORKER:
             # Hardest decomposition the Planner does -- always CEILING tier.
             plan = await self._llm.generate_manager_worker_plan(
@@ -75,14 +78,14 @@ class PlannerKernel:
                 problem_spec_json=request.problem_spec_json,
             )
 
-        criteria = list(problem_spec.success_criteria)
-        if criteria:
-            skeleton = skeleton.model_copy(update={
-                "nodes": [
-                    node.model_copy(update={"success_criteria": list(criteria)})
-                    for node in skeleton.nodes
-                ]
-            })
+        try:
+            skeleton = retain_and_validate_criteria(
+                skeleton, criteria
+            )
+        except ValueError as exc:
+            raise PlannerExecutionError(
+                f"Planner did not assign intake success criteria: {exc}"
+            ) from exc
 
         # Problem Understanding owns ambiguity evidence; Planner does not
         # re-query ADS or infer ambiguity from raw conversational text.

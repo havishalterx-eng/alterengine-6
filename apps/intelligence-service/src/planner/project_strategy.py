@@ -45,7 +45,9 @@ def _node_key(stage_key: str) -> str:
     return f"node_{stage_key}"
 
 
-def build_project_skeleton(kb_context: str) -> TaskSkeleton:
+def build_project_skeleton(
+    kb_context: str, success_criteria: list[str] | None = None
+) -> TaskSkeleton:
     """Build the fixed 14-stage Project-mode TaskSkeleton.
 
     kb_context is attached only to the plan_architecture stage's config,
@@ -67,6 +69,13 @@ def build_project_skeleton(kb_context: str) -> TaskSkeleton:
                 type=node_type,
                 config=config,
                 depends_on=[_node_key(previous_key)] if previous_key else [],
+                # This fixed pipeline's acceptance stage owns its complete
+                # acceptance contract; no criterion text is guessed or split.
+                success_criteria=(
+                    list(success_criteria)
+                    if stage_key == "acceptance_verify" and success_criteria
+                    else None
+                ),
             )
         )
         previous_key = stage_key

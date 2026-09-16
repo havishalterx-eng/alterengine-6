@@ -112,6 +112,7 @@ describe("compileTaskSkeletonToDag", () => {
   it("carries supplied success criteria onto the matching compiled node", () => {
     const skeleton = parseTaskSkeleton(JSON.stringify({
       ...sequentialSkeleton(),
+      success_criteria: ["Workflow is ready for review."],
       nodes: [
         { ...sequentialSkeleton().nodes[0], success_criteria: ["Plan is ready for review."] },
         ...sequentialSkeleton().nodes.slice(1),
@@ -123,6 +124,7 @@ describe("compileTaskSkeletonToDag", () => {
     expect(dag.nodes.find((node) => node.key === "node_a")?.success_criteria).toEqual([
       "Plan is ready for review.",
     ]);
+    expect(dag.success_criteria).toEqual(["Workflow is ready for review."]);
   });
 
   it("compiles legacy skeletons without success criteria", () => {

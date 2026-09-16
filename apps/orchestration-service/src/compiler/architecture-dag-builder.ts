@@ -32,6 +32,7 @@ const ArchitectureSpec = z.object({
     order: z.number().int().nonnegative(), node_keys: z.array(NodeKey).min(1), depends_on_wave_orders: z.array(z.number().int().nonnegative()),
   }).strict()).min(1),
   boundaries: z.array(z.object({ kind: z.enum(["verification", "human_approval"]), after_node_key: NodeKey, reason: z.string().min(1) }).strict()),
+  success_criteria: z.array(z.string().trim().min(1)).min(1).nullable().optional(),
 }).passthrough();
 const BindingDecision = z.object({
   status: z.literal("ready"),
@@ -121,7 +122,16 @@ export function compileArchitectureToDag(raw: ArchitectureCompileInput): Compile
     boundaryWaves.push({ key: `boundary_wave_${index}`, order: (waves.at(-1)?.order ?? 0) + index + 1, node_keys: [`${boundary.kind}_${boundary.after_node_key}`], depends_on: [sourceWave.key] });
   }
   const entry = architecture.nodes.filter((node) => node.depends_on.length === 0).map((node) => node.source_node_key).sort();
-  const result = CompiledDagSchema.safeParse({ schema_version: input.data.dag_schema_version, entry_node_keys: entry, nodes, edges, waves: [...waves, ...boundaryWaves] });
+  const result = CompiledDagSchema.safeParse({
+    schema_version: input.data.dag_schema_version,
+    entry_node_keys: entry,
+    ...(architecture.success_criteria === undefined || architecture.success_criteria === null
+      ? {}
+      : { success_criteria: architecture.success_criteria }),
+    nodes,
+    edges,
+    waves: [...waves, ...boundaryWaves],
+  });
   if (!result.success) throw new CompilerValidationError(`invalid architecture DAG: ${result.error.message}`);
   return result.data;
 }

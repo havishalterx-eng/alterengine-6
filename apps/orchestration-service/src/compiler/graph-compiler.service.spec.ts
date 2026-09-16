@@ -145,6 +145,7 @@ describe("GraphCompilerService.compileWorkflow", () => {
     const { store, rows } = createFakeStore();
     const service = new GraphCompilerService(store);
     const skeleton = JSON.parse(skeletonJson());
+    skeleton.success_criteria = ["Workflow is ready for review."];
     skeleton.nodes[0].success_criteria = ["Plan is ready for review."];
 
     await service.compileWorkflow(compileRequest({ task_skeleton_json: JSON.stringify(skeleton) }));
@@ -153,6 +154,7 @@ describe("GraphCompilerService.compileWorkflow", () => {
     expect(dag.nodes.find((node: { key: string }) => node.key === "node_a").success_criteria).toEqual([
       "Plan is ready for review.",
     ]);
+    expect(dag.success_criteria).toEqual(["Workflow is ready for review."]);
   });
 
   it("returns a wfv_ prefixed workflow_version_id", async () => {

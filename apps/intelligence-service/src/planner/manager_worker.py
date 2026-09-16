@@ -27,6 +27,7 @@ class WorkerTaskSpec(BaseModel):
     key: str
     objective: str
     config: dict[str, object] = Field(default_factory=dict)
+    success_criteria: list[str] | None = None
 
 
 class ManagerWorkerPlan(BaseModel):
@@ -34,6 +35,8 @@ class ManagerWorkerPlan(BaseModel):
 
     manager_config: dict[str, object] = Field(default_factory=dict)
     workers: list[WorkerTaskSpec] = Field(min_length=1)
+    manager_success_criteria: list[str] | None = None
+    join_success_criteria: list[str] | None = None
 
 
 def _worker_node_key(worker_key: str) -> str:
@@ -49,6 +52,7 @@ def build_manager_worker_skeleton(plan: ManagerWorkerPlan) -> TaskSkeleton:
             type="llm",
             config=plan.manager_config,
             depends_on=[],
+            success_criteria=plan.manager_success_criteria,
         )
     ]
     nodes.extend(
@@ -57,6 +61,7 @@ def build_manager_worker_skeleton(plan: ManagerWorkerPlan) -> TaskSkeleton:
             type="llm",
             config={"objective": worker.objective, **worker.config},
             depends_on=[_MANAGER_NODE_KEY],
+            success_criteria=worker.success_criteria,
         )
         for worker in plan.workers
     )
@@ -66,6 +71,7 @@ def build_manager_worker_skeleton(plan: ManagerWorkerPlan) -> TaskSkeleton:
             type="join",
             config={},
             depends_on=worker_node_keys,
+            success_criteria=plan.join_success_criteria,
         )
     )
 

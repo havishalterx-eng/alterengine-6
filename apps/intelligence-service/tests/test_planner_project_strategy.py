@@ -52,3 +52,12 @@ class TestBuildProjectSkeleton:
         round_tripped = TaskSkeleton.from_json(skeleton.to_json())
 
         assert round_tripped == skeleton
+
+    def test_assigns_success_criteria_to_acceptance_stage(self) -> None:
+        skeleton = build_project_skeleton(
+            kb_context="", success_criteria=["Preview is deployed."]
+        )
+
+        acceptance = next(node for node in skeleton.nodes if node.key == "node_acceptance_verify")
+        assert acceptance.success_criteria == ["Preview is deployed."]
+        assert sum(node.success_criteria is not None for node in skeleton.nodes) == 1

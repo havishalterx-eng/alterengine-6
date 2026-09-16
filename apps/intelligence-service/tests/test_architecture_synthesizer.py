@@ -186,10 +186,21 @@ async def test_carries_node_success_criteria_into_architecture() -> None:
             type="llm",
             success_criteria=["The response answers the requested question."],
         )
-    ]))
+    ]).model_copy(update={
+        "task_skeleton": TaskSkeleton(
+            nodes=[TaskNode(
+                key="one",
+                type="llm",
+                success_criteria=["The response answers the requested question."],
+            )],
+            entry_point="one",
+            success_criteria=["The response answers the requested question."],
+        )
+    }))
 
     assert isinstance(result, ArchitectureSpec)
     assert result.nodes[0].success_criteria == ["The response answers the requested question."]
+    assert result.success_criteria == ["The response answers the requested question."]
 
 
 def test_registry_eligibility_filters_availability_capacity_and_constraints() -> None:
