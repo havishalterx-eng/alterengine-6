@@ -5,7 +5,7 @@ import { AuditConfigurationError, loadAuditEnvironment } from "./environment";
 function environment(
   overrides: NodeJS.ProcessEnv = {},
 ): NodeJS.ProcessEnv {
-  return {
+  const merged: NodeJS.ProcessEnv = {
     ALTER_ENV: "local",
     ALTER_SERVICE_NAME: "audit-service",
     ALTER_REGION: "ap-south-1",
@@ -18,6 +18,10 @@ function environment(
     DELETION_SERVICE_TOKEN_REF: "/alter/local/audit-service/system/deletion-service-token",
     ...overrides,
   };
+  if (overrides.ALTER_CONFIG_SOURCE === "appconfig" && overrides.RUNTIME_MODE === undefined) {
+    merged.RUNTIME_MODE = "real";
+  }
+  return merged;
 }
 
 describe("loadAuditEnvironment", () => {
@@ -26,6 +30,7 @@ describe("loadAuditEnvironment", () => {
       alterEnvironment: "local",
       serviceName: "audit-service",
       region: "ap-south-1",
+      runtimeMode: "mock",
       configSource: "local-file",
       databaseAuthentication: "static",
       databaseSecretReference:
@@ -49,13 +54,13 @@ describe("loadAuditEnvironment", () => {
     },
   );
 
-  it("rejects local static authentication when NODE_ENV is production", () => {
+  it("rejects mock runtime mode when NODE_ENV is production", () => {
     expect(() =>
       loadAuditEnvironment(environment({ NODE_ENV: "production" })),
     ).toThrow(AuditConfigurationError);
     expect(() =>
       loadAuditEnvironment(environment({ NODE_ENV: "production" })),
-    ).toThrow(/static database authentication/);
+    ).toThrow(/RUNTIME_MODE/);
   });
 
   it("accepts validated custom bind ports", () => {
@@ -94,15 +99,22 @@ describe("loadAuditEnvironment", () => {
     ).toThrow(AuditConfigurationError);
   });
 
-  it("prefers AUDIT_CONFIG_SOURCE, which no other service reads", () => {
+  it("uses the shared config source and ignores retired scoped overrides", () => {
     expect(
       loadAuditEnvironment(
         environment({
-          ALTER_CONFIG_SOURCE: "mock",
+          ALTER_CONFIG_SOURCE: "appconfig",
+          RUNTIME_MODE: "real",
           AUDIT_CONFIG_SOURCE: "local-file",
+          ALTER_ENV: "prod",
+          DATABASE_SECRET_REF: undefined,
+          DATABASE_HOST: "db.internal",
+          DATABASE_PORT: "5432",
+          DATABASE_NAME: "audit_db",
+          DATABASE_USER: "audit_service",
         }),
       ),
-    ).toMatchObject({ configSource: "local-file" });
+    ).toMatchObject({ configSource: "appconfig", runtimeMode: "real" });
   });
 
   it("defaults deployed environments to IAM database authentication metadata", () => {

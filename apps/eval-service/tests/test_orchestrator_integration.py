@@ -307,7 +307,6 @@ def verification_server_target(
                 "ALTER_ENV": "local",
                 "ALTER_SERVICE_NAME": "model-gateway",
                 "ALTER_REGION": "ap-south-1",
-                "ALTER_CONFIG_SOURCE": "mock",
                 "PORT": str(model_gateway_http_port),
                 "GRPC_BIND_ADDRESS": f"127.0.0.1:{model_gateway_port}",
                 **local_m2m_issuer.environment(),
@@ -626,7 +625,6 @@ def orchestration_intent_server_target(
             "ALTER_ENV": "local",
             "ALTER_SERVICE_NAME": "model-gateway",
             "ALTER_REGION": "ap-south-1",
-            "ALTER_CONFIG_SOURCE": "mock",
             "PORT": str(model_gateway_http_port),
             "GRPC_BIND_ADDRESS": f"127.0.0.1:{model_gateway_port}",
             **local_m2m_issuer.environment(),
@@ -706,7 +704,6 @@ def model_cache_server_target(
             "ALTER_ENV": "local",
             "ALTER_SERVICE_NAME": "model-gateway",
             "ALTER_REGION": "ap-south-1",
-            "ALTER_CONFIG_SOURCE": "mock",
             "PORT": str(http_port),
             "GRPC_BIND_ADDRESS": f"127.0.0.1:{port}",
             **local_m2m_issuer.environment(),
@@ -1565,7 +1562,6 @@ def security_eval_server_target(
             "ALTER_ENV": "local",
             "ALTER_SERVICE_NAME": "model-gateway",
             "ALTER_REGION": "ap-south-1",
-            "ALTER_CONFIG_SOURCE": "mock",
             "PORT": str(model_gateway_http_port),
             "GRPC_BIND_ADDRESS": f"127.0.0.1:{model_gateway_port}",
             **local_m2m_issuer.environment(),
@@ -1828,7 +1824,7 @@ def tool_gateway_server_target(
     """Real, live tool-gateway production gRPC server (main.js, unmodified)
     -- ResolveCredential's cross-tenant ownership check is real and pure,
     throws before ever touching a real secrets provider, so the sanctioned
-    ALTER_CONFIG_SOURCE=mock local/dev mode is sufficient.
+    default local-file config source, mock runtime mode, is sufficient.
     """
     tool_gateway_root = REPO_ROOT / "apps" / "tool-gateway"
     tool_gateway_dist = REPO_ROOT / "dist" / "apps" / "tool-gateway" / "main.js"
@@ -1848,7 +1844,6 @@ def tool_gateway_server_target(
             "ALTER_ENV": "local",
             "ALTER_SERVICE_NAME": "tool-gateway",
             "ALTER_REGION": "ap-south-1",
-            "ALTER_CONFIG_SOURCE": "mock",
             "PORT": str(http_port),
             "GRPC_BIND_ADDRESS": f"127.0.0.1:{port}",
             **local_m2m_issuer.environment(),
@@ -2458,7 +2453,7 @@ def agent_binding_server_target(
 ) -> Generator[tuple[str, str], None, None]:
     """Real, live intelligence-service production FastAPI app (src.main:app)
     for agent_selection_binding, backed by a real, live model-gateway
-    (production main.ts, ALTER_CONFIG_SOURCE=mock) so
+    (production main.ts, default local-file config source, mock runtime mode) so
     SelectionBindingEngine.bind()'s real GrpcEmbeddingClient.embed() call
     actually succeeds -- see agent_binding_client.py's own module doc for
     why mock config source needs no live LLM key here (only the
@@ -2505,7 +2500,6 @@ def agent_binding_server_target(
                 "ALTER_ENV": "local",
                 "ALTER_SERVICE_NAME": "model-gateway",
                 "ALTER_REGION": "ap-south-1",
-                "ALTER_CONFIG_SOURCE": "mock",
                     "PORT": str(model_gateway_http_port),
                     "GRPC_BIND_ADDRESS": f"127.0.0.1:{model_gateway_grpc_port}",
                     **local_m2m_issuer.environment(),

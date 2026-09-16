@@ -25,7 +25,7 @@
     "serve": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "uv run uvicorn src.main:app",
+        "command": "UVICORN_PORT=${VERIFICATION_SERVICE_PORT:-8001} uv run uvicorn src.main:app",
         "cwd": "apps/verification-service"
       }
     },

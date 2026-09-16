@@ -25,9 +25,11 @@ cd "$(dirname "$0")/.."
 
 HEALTH=scripts/verify-local-stack-health.sh
 COMPOSE=docker-compose.yml
+EXAMPLE=.env.local.example
 
 [ -f "$HEALTH" ] || { echo "check-stack-health-script: $HEALTH missing" >&2; exit 2; }
 [ -f "$COMPOSE" ] || { echo "check-stack-health-script: $COMPOSE missing" >&2; exit 2; }
+[ -f "$EXAMPLE" ] || { echo "check-stack-health-script: $EXAMPLE missing" >&2; exit 2; }
 
 # 1. syntax
 sh -n "$HEALTH" || { echo "check-stack-health-script: $HEALTH has syntax errors" >&2; exit 1; }
@@ -53,5 +55,29 @@ for v in $compose_vars; do
   fi
 done
 [ "$missing" -eq 0 ] || exit 1
+
+# Application listeners are native processes, not compose services. Keep the
+# documented variables and the health probes together so sibling checkouts can
+# move every HTTP surface independently.
+for v in AUDIT_PORT ADS_CORE_PORT COST_PORT ORCHESTRATION_PORT BACKGROUND_WORKERS_PORT \
+  MODEL_GATEWAY_PORT TOOL_GATEWAY_PORT SANDBOX_SERVICE_PORT PROVISIONING_SERVICE_PORT \
+  PLATFORM_API_PORT INTELLIGENCE_SERVICE_PORT VERIFICATION_SERVICE_PORT MEMORY_SERVICE_PORT \
+  EVAL_SERVICE_PORT PLATFORM_WEB_PORT MOCK_AUTH0_PORT; do
+  if ! grep -q "^$v=" "$EXAMPLE" || ! grep -qE "\\\$\{$v:-" "$HEALTH"; then
+    echo "check-stack-health-script: $v must be documented in $EXAMPLE and read by $HEALTH" >&2
+    exit 1
+  fi
+done
+
+# Application health probes must compare the responder's service identity;
+# HTTP 200 alone let a sibling process masquerade as this stack.
+for service in audit-service ads-core cost-ledger-service orchestration-service \
+  background-workers model-gateway tool-gateway sandbox-service provisioning-service \
+  platform-api intelligence-service verification-service memory-service eval-service; do
+  if ! grep -qE "check_http \"${service}\".* ${service}$" "$HEALTH"; then
+    echo "check-stack-health-script: $service probe has no service-identity expectation" >&2
+    exit 1
+  fi
+done
 
 echo "check-stack-health-script ok: $HEALTH syntax valid, all $(echo "$compose_vars" | wc -l | tr -d ' ') compose dependency port(s) read by the health script, no bare-literal ports."

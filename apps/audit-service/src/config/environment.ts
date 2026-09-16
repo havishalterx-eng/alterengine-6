@@ -1,13 +1,13 @@
 import { createEnvironmentValidators } from "@alterx/adapters";
 
 const ALTER_ENVIRONMENTS = ["local", "dev", "staging", "prod"] as const;
-const CONFIG_SOURCES = ["appconfig", "local-file"] as const;
 
 interface AuditEnvironmentBase {
   readonly alterEnvironment: (typeof ALTER_ENVIRONMENTS)[number];
   readonly serviceName: "audit-service";
   readonly region: "ap-south-1";
-  readonly configSource: (typeof CONFIG_SOURCES)[number];
+  readonly runtimeMode: "real" | "mock";
+  readonly configSource: "appconfig" | "local-file";
   readonly auditArchiveBucketParameter: string;
   readonly httpPort: number;
   readonly grpcBindAddress: string;
@@ -39,7 +39,7 @@ export class AuditConfigurationError extends Error {
   }
 }
 
-const { requireValue, scopedValue, requireScopedValue, parsePort, parseRequiredPort, parseGrpcAddress } =
+const { requireValue, scopedValue, requireScopedValue, parsePort, parseRequiredPort, parseGrpcAddress, runtimeMode, configSource: readConfigSource } =
   createEnvironmentValidators((field, reason) => new AuditConfigurationError(field, reason));
 
 // Distinct from every other service's default, so the whole stack can start
@@ -58,15 +58,7 @@ export function loadAuditEnvironment(
       `must be one of ${ALTER_ENVIRONMENTS.join(", ")}`,
     );
   }
-  if (
-    alterEnvironment === "local" &&
-    environment.NODE_ENV === "production"
-  ) {
-    throw new AuditConfigurationError(
-      "ALTER_ENV",
-      "local cannot select static database authentication when NODE_ENV is production",
-    );
-  }
+  const mode = runtimeMode(environment);
 
   // Defaults to this service's own name: a shared env file can only carry
   // one value, and the service already knows which one it is. Still validated
@@ -87,21 +79,14 @@ export function loadAuditEnvironment(
     );
   }
 
-  // Services declare their own accepted values and read a service-scoped
-  // variable first, with the shared value as a fallback.
-  const configSource = requireScopedValue(environment, "AUDIT_CONFIG_SOURCE", "ALTER_CONFIG_SOURCE");
-  if (!CONFIG_SOURCES.includes(configSource as AuditEnvironment["configSource"])) {
-    throw new AuditConfigurationError(
-      "ALTER_CONFIG_SOURCE",
-      `must be one of ${CONFIG_SOURCES.join(", ")}`,
-    );
-  }
+  const configSource = readConfigSource(environment);
 
   const baseEnvironment: AuditEnvironmentBase = {
     alterEnvironment:
       alterEnvironment as AuditEnvironment["alterEnvironment"],
     serviceName,
     region,
+    runtimeMode: mode,
     configSource: configSource as AuditEnvironment["configSource"],
     auditArchiveBucketParameter: requireValue(
       environment,

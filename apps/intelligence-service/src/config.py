@@ -1,9 +1,14 @@
 from functools import lru_cache
+from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    runtime_mode: Literal["real", "mock"] = "mock"
+    alter_config_source: Literal["appconfig", "local-file"] = "local-file"
+    node_env: str = "development"
     intelligence_db_url: str = "postgresql+asyncpg://intelligence_service:intelligence_local@localhost:5433/intelligence_db"
     intelligence_db_url_sync: str = "postgresql+psycopg2://intelligence_service:intelligence_local@localhost:5433/intelligence_db"
     intelligence_drift_reader_db_url: str = "postgresql+asyncpg://intelligence_drift_reader:intelligence_drift_reader_local@localhost:5433/intelligence_db"
@@ -26,6 +31,12 @@ class Settings(BaseSettings):
     # is returned instead, which is a real answer rather than a failure to
     # route around.
     agent_auto_creation_max_tier: str = "ADVANCED"
+
+    @model_validator(mode="after")
+    def reject_mock_runtime_in_production(self) -> "Settings":
+        if self.runtime_mode == "mock" and self.node_env == "production":
+            raise ValueError("RUNTIME_MODE=mock is not allowed when NODE_ENV=production")
+        return self
 
     model_config = SettingsConfigDict(
         env_file=".env.local",

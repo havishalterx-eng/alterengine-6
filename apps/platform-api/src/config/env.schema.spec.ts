@@ -45,10 +45,11 @@ describe("platformApiEnvSchema", () => {
       MARKETPLACE_OBJECT_STORAGE_PROVIDER: "mock",
       REGISTRY_SCAN_PROVIDER: "mock",
       STATUS_PAGE_PROVIDER: "mock",
+      RUNTIME_MODE: "mock",
     });
   });
 
-  it("prefers PLATFORM_API_CONFIG_SOURCE over ALTER_CONFIG_SOURCE", () => {
+  it("ignores the retired service-scoped config source", () => {
     expect(
       validatePlatformApiEnv({
         DATABASE_URL: "postgres://platform_api:platform_api_local@localhost:5432/platform_db",
@@ -56,10 +57,23 @@ describe("platformApiEnvSchema", () => {
           "postgres://platform_api:platform_api_local@localhost:5432/marketplace_db",
         MARKETPLACE_SEARCH_CURSOR_SECRET: cursorSecret,
         ACTOR_TOKEN_SIGNING_KEY_REF: "env:ACTOR_TOKEN_PRIVATE_KEY",
-        ALTER_CONFIG_SOURCE: "mock",
-        PLATFORM_API_CONFIG_SOURCE: "local-file",
+        ALTER_CONFIG_SOURCE: "local-file",
+        RUNTIME_MODE: "mock",
+        PLATFORM_API_CONFIG_SOURCE: "appconfig",
       }).ALTER_CONFIG_SOURCE,
     ).toBe("local-file");
+  });
+
+  it("rejects mock runtime mode in production", () => {
+    expect(() =>
+      validatePlatformApiEnv({
+        DATABASE_URL: "postgres://localhost/platform_db",
+        MARKETPLACE_DATABASE_URL: "postgres://localhost/marketplace_db",
+        MARKETPLACE_SEARCH_CURSOR_SECRET: cursorSecret,
+        NODE_ENV: "production",
+        RUNTIME_MODE: "mock",
+      }),
+    ).toThrow(/RUNTIME_MODE=mock/);
   });
 
   it("requires Auth0 refs when Auth0 provider is selected", () => {

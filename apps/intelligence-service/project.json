@@ -25,7 +25,7 @@
     "serve": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "uv run uvicorn src.main:app",
+        "command": "UVICORN_PORT=${INTELLIGENCE_SERVICE_PORT:-8000} uv run uvicorn src.main:app",
         "cwd": "apps/intelligence-service"
       }
     },

@@ -118,8 +118,6 @@ generate_values() {
   printf 'MARKETPLACE_SEARCH_CURSOR_SECRET=%s\n' "$cursor"
   printf 'ADS_DB_PASSWORD=%s\n' "ads_core_local"
   printf 'MEMORY_DB_PASSWORD=%s\n' "$audit"   # engine-db-init.sh: = AUDIT_DB_PASSWORD
-  printf 'AWS_ACCESS_KEY_ID=%s\n' "test"
-  printf 'AWS_SECRET_ACCESS_KEY=%s\n' "test"
 }
 
 is_placeholder() {
@@ -193,8 +191,6 @@ render() {
     val="${val//<generate-32-byte-hex-token>/$INTERNAL_SERVICE_TOKEN}"
     val="${val//<sha256-of-the-token-above>/$INTERNAL_SERVICE_TOKEN_SHA256}"
     val="${val//<generate-32-byte-hex-secret>/$MARKETPLACE_SEARCH_CURSOR_SECRET}"
-    val="${val//<localstack-access-key>/$AWS_ACCESS_KEY_ID}"
-    val="${val//<localstack-secret-key>/$AWS_SECRET_ACCESS_KEY}"
     # ORCHESTRATION_DB_PASSWORD line + its URL use a bare sentinel:
     val="${val//replace-me-with-a-random-value/$ORCHESTRATION_DB_PASSWORD}"
     printf '%s=%s\n' "$key" "$val" >> "$out.tmp.$$"
@@ -228,6 +224,11 @@ verify_file() {
   local leftover
   leftover="$(grep -nE '^[^#]*<[^>]+>|^[^#]*replace-me-with-a-random-value' "$f" || true)"
   if [ -n "$leftover" ]; then echo "verify: unresolved placeholder(s) remain:" >&2; echo "$leftover" >&2; return 1; fi
+  if grep -qE '^AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY)=test$' "$f" ||
+    [ "${AWS_ACCESS_KEY_ID:-}" = "test" ] || [ "${AWS_SECRET_ACCESS_KEY:-}" = "test" ]; then
+    echo "verify: LocalStack test AWS credentials override the operator's ~/.aws profile; remove AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY from $f" >&2
+    return 1
+  fi
   local tok tok_sha computed
   tok="$(awk -F= '$1=="INTERNAL_SERVICE_TOKEN"{print $2}' "$f")"
   tok_sha="$(awk -F= '$1=="INTERNAL_SERVICE_TOKEN_SHA256"{print $2}' "$f")"

@@ -1,10 +1,14 @@
 from functools import lru_cache
+from typing import Literal
 
-from pydantic import AnyHttpUrl, Field
+from pydantic import AnyHttpUrl, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    runtime_mode: Literal["real", "mock"] = "mock"
+    alter_config_source: Literal["appconfig", "local-file"] = "local-file"
+    node_env: str = "development"
     policy_db_url_sync: str = (
         "postgresql+psycopg2://memory_service:memory_local@localhost:5433/policy_db"
     )
@@ -39,6 +43,12 @@ class Settings(BaseSettings):
     # gt=0, not ge=0: DriftDetector rejects a significance_level of exactly
     # 0 (would mean "never statistically significant", not a real gate).
     drift_significance_level: float = Field(default=0.05, gt=0, le=1)
+
+    @model_validator(mode="after")
+    def reject_mock_runtime_in_production(self) -> "Settings":
+        if self.runtime_mode == "mock" and self.node_env == "production":
+            raise ValueError("RUNTIME_MODE=mock is not allowed when NODE_ENV=production")
+        return self
 
     model_config = SettingsConfigDict(
         env_file=".env.local",

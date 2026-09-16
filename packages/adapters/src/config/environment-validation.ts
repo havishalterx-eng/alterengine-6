@@ -1,6 +1,8 @@
 export type ConfigurationErrorFactory = (field: string, reason: string) => Error;
 
 export interface EnvironmentValidators {
+  runtimeMode(environment: NodeJS.ProcessEnv): "real" | "mock";
+  configSource(environment: NodeJS.ProcessEnv): "appconfig" | "local-file";
   requireValue(environment: NodeJS.ProcessEnv, field: string): string;
   scopedValue(
     environment: NodeJS.ProcessEnv,
@@ -34,6 +36,29 @@ export function createEnvironmentValidators(
     createError(field, "must be an integer from 1 to 65535");
 
   return {
+    runtimeMode(environment): "real" | "mock" {
+      const value = environment.RUNTIME_MODE?.trim() || "mock";
+      if (value !== "real" && value !== "mock") {
+        throw createError("RUNTIME_MODE", "must be real or mock");
+      }
+      if (value === "mock" && environment.NODE_ENV === "production") {
+        throw createError(
+          "RUNTIME_MODE",
+          "mock is not allowed when NODE_ENV is production",
+        );
+      }
+      return value;
+    },
+    configSource(environment): "appconfig" | "local-file" {
+      const value = environment.ALTER_CONFIG_SOURCE?.trim() || "local-file";
+      if (value !== "appconfig" && value !== "local-file") {
+        throw createError(
+          "ALTER_CONFIG_SOURCE",
+          "must be one of appconfig, local-file",
+        );
+      }
+      return value;
+    },
     requireValue(environment, field): string {
       const value = environment[field]?.trim();
       if (value === undefined || value.length === 0) {

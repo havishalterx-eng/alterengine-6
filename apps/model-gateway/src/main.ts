@@ -49,7 +49,7 @@ function createConfigProvider(
   environment: ReturnType<typeof loadModelGatewayEnvironment>,
   store: MutableParameterStoreProvider,
 ): OperationalConfigProvider {
-  const baseline: ConfigProvider = environment.configSource === "mock"
+  const baseline: ConfigProvider = environment.runtimeMode === "mock"
     ? createMockConfigProvider()
     : new AwsAppConfigConfigProvider({
         region: environment.region,
@@ -79,7 +79,7 @@ async function createModelProvider(
   environment: ReturnType<typeof loadModelGatewayEnvironment>,
   store: MutableParameterStoreProvider,
 ): Promise<FailoverModelProvider> {
-  if (environment.configSource === "mock") {
+  if (environment.runtimeMode === "mock") {
     return new FailoverModelProvider(createMockModelProvider(), {}, {
       store,
       parameterName: providerControlParameterName(environment),
@@ -120,7 +120,7 @@ async function createModelProvider(
 function createParameterStore(
   environment: ReturnType<typeof loadModelGatewayEnvironment>,
 ): MutableParameterStoreProvider {
-  return environment.configSource === "mock"
+  return environment.runtimeMode === "mock"
     ? createMockMutableParameterStoreProvider()
     : new AwsSsmParameterProvider({ region: environment.region });
 }
@@ -128,7 +128,7 @@ function createParameterStore(
 async function resolveAdminServiceToken(
   environment: ReturnType<typeof loadModelGatewayEnvironment>,
 ): Promise<string> {
-  if (environment.configSource === "mock") return randomUUID();
+  if (environment.runtimeMode === "mock") return randomUUID();
   const secrets = new AwsSecretsManagerProvider({ region: environment.region });
   try {
     return await secrets.getSecret(
@@ -142,7 +142,7 @@ async function resolveAdminServiceToken(
 function providerControlParameterName(
   environment: ReturnType<typeof loadModelGatewayEnvironment>,
 ): string {
-  return environment.configSource === "mock"
+  return environment.runtimeMode === "mock"
     ? "/alter/local/model-gateway/provider-controls"
     : environment.providerControlParameterName;
 }
@@ -150,7 +150,7 @@ function providerControlParameterName(
 function modelPolicyParameterName(
   environment: ReturnType<typeof loadModelGatewayEnvironment>,
 ): string {
-  return environment.configSource === "mock"
+  return environment.runtimeMode === "mock"
     ? "/alter/local/model-gateway/model-policy"
     : environment.modelPolicyOverrideParameterName;
 }
@@ -158,7 +158,7 @@ function modelPolicyParameterName(
 function createPIIRedactionProvider(
   environment: ReturnType<typeof loadModelGatewayEnvironment>,
 ): PIIRedactionProvider {
-  if (environment.configSource === "mock") {
+  if (environment.runtimeMode === "mock") {
     return createMockPIIRedactionProvider();
   }
   return new PresidioPIIRedactionProvider({
@@ -171,7 +171,7 @@ function createEmbeddingProvider(
   environment: ReturnType<typeof loadModelGatewayEnvironment>,
 ): EmbeddingProvider {
   if (
-    environment.configSource === "mock" &&
+    environment.runtimeMode === "mock" &&
     environment.embeddingProvider === "mock"
   ) {
     return createMockEmbeddingProvider();
@@ -187,7 +187,7 @@ function createEmbeddingProvider(
 function embeddingProviderLogMessage(
   environment: ReturnType<typeof loadModelGatewayEnvironment>,
 ): string {
-  if (environment.configSource === "appconfig") return "Embedding provider: Titan";
+  if (environment.runtimeMode === "real") return "Embedding provider: Titan";
   return environment.embeddingProvider === "titan"
     ? "Embedding provider: Titan (local opt-in)"
     : "Embedding provider: mock";
@@ -196,7 +196,7 @@ function embeddingProviderLogMessage(
 function createCacheProvider(
   environment: ReturnType<typeof loadModelGatewayEnvironment>,
 ): CacheProvider {
-  if (environment.configSource === "mock") {
+  if (environment.runtimeMode === "mock") {
     return createMockCacheProvider();
   }
   return new RedisCacheProvider({
@@ -208,7 +208,7 @@ function createCacheProvider(
 function createQueueProvider(
   environment: ReturnType<typeof loadModelGatewayEnvironment>,
 ): QueueProvider {
-  if (environment.configSource === "mock") {
+  if (environment.runtimeMode === "mock") {
     return createMockQueueProvider();
   }
   return new SqsQueueProvider({

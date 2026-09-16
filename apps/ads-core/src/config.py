@@ -1,10 +1,14 @@
 from functools import lru_cache
+from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    runtime_mode: Literal["real", "mock"] = "mock"
+    alter_config_source: Literal["appconfig", "local-file"] = "local-file"
+    node_env: str = "development"
     ads_db_url: str = "postgresql+asyncpg://ads_core:ads_core_local@localhost:5434/ads_db"
     ads_db_url_sync: str = "postgresql+psycopg2://ads_core:ads_core_local@localhost:5434/ads_db"
     # Dedicated BYPASSRLS connection used only by the authenticated internal
@@ -44,6 +48,12 @@ class Settings(BaseSettings):
     ads_uploads_presign_expiry_seconds: int = 900
     ads_connectors_secrets_region: str | None = None
     ads_q_max_concurrency: int = Field(default=16, ge=1, le=128)
+
+    @model_validator(mode="after")
+    def reject_mock_runtime_in_production(self) -> "Settings":
+        if self.runtime_mode == "mock" and self.node_env == "production":
+            raise ValueError("RUNTIME_MODE=mock is not allowed when NODE_ENV=production")
+        return self
 
     model_config = SettingsConfigDict(
         env_file=".env.local",

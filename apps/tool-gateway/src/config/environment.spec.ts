@@ -8,13 +8,18 @@ import {
 function environment(
   overrides: NodeJS.ProcessEnv = {},
 ): NodeJS.ProcessEnv {
-  return {
+  const merged = {
     ALTER_ENV: "local",
     ALTER_SERVICE_NAME: "tool-gateway",
     ALTER_REGION: "ap-south-1",
-    ALTER_CONFIG_SOURCE: "mock",
+    RUNTIME_MODE: "mock",
+    ALTER_CONFIG_SOURCE: "local-file",
     ...overrides,
   };
+  if (overrides.ALTER_CONFIG_SOURCE === "appconfig" && overrides.RUNTIME_MODE === undefined) {
+    merged.RUNTIME_MODE = "real";
+  }
+  return merged;
 }
 
 describe("loadToolGatewayEnvironment", () => {
@@ -23,7 +28,8 @@ describe("loadToolGatewayEnvironment", () => {
       alterEnvironment: "local",
       serviceName: "tool-gateway",
       region: "ap-south-1",
-      configSource: "mock",
+      runtimeMode: "mock",
+      configSource: "local-file",
       httpPort: 3024,
       grpcBindAddress: "0.0.0.0:50053",
     });
@@ -63,16 +69,16 @@ describe("loadToolGatewayEnvironment", () => {
     });
   });
 
-  it("rejects the mock config source outside local", () => {
+  it("rejects the retired mock config source", () => {
     expect(() =>
-      loadToolGatewayEnvironment(environment({ ALTER_ENV: "dev" })),
-    ).toThrow(/mock config source is only permitted/);
+      loadToolGatewayEnvironment(environment({ ALTER_CONFIG_SOURCE: "mock" })),
+    ).toThrow(/must be one of appconfig, local-file/);
   });
 
-  it("rejects the mock config source when NODE_ENV is production", () => {
+  it("rejects mock runtime mode when NODE_ENV is production", () => {
     expect(() =>
       loadToolGatewayEnvironment(environment({ NODE_ENV: "production" })),
-    ).toThrow(/cannot be selected when NODE_ENV is production/);
+    ).toThrow(/mock is not allowed when NODE_ENV is production/);
   });
 
   it.each([undefined, "test", "development"])(
@@ -82,7 +88,7 @@ describe("loadToolGatewayEnvironment", () => {
         loadToolGatewayEnvironment(
           environment({ NODE_ENV: nodeEnvironment }),
         ),
-      ).toMatchObject({ configSource: "mock" });
+      ).toMatchObject({ configSource: "local-file", runtimeMode: "mock" });
     },
   );
 

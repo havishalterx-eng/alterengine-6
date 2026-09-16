@@ -4,12 +4,17 @@ import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fa
 import {
   AwsSecretsManagerProvider,
   E2bSandboxProvider,
+  createEnvironmentValidators,
   startProvisioningGrpcTransport,
 } from "@alterx/adapters";
 import { createMockSandboxProvider, createMockSecretsProvider } from "@alterx/shared-clients";
 import { AppModule } from "./app.module";
 import { loadProvisioningEnvironment } from "./config/environment";
 import { PROVISIONING_PROTO_PATH } from "./provisioning/grpc.constants";
+
+const { parsePort, scopedValue } = createEnvironmentValidators(
+  (field, reason) => new Error(`${field} ${reason}`),
+);
 
 async function bootstrap(): Promise<void> {
   const environment = loadProvisioningEnvironment(process.env);
@@ -30,6 +35,9 @@ async function bootstrap(): Promise<void> {
     protoPath: PROVISIONING_PROTO_PATH,
   });
   app.enableShutdownHooks();
-  await app.listen(Number(process.env.PORT ?? 3000), "0.0.0.0");
+  await app.listen(
+    parsePort(scopedValue(process.env, "PROVISIONING_SERVICE_PORT", "PORT"), "PROVISIONING_SERVICE_PORT", 3026),
+    "0.0.0.0",
+  );
 }
 void bootstrap();

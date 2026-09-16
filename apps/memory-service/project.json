@@ -14,7 +14,7 @@
     "serve": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "uv run uvicorn src.main:app",
+        "command": "UVICORN_PORT=${MEMORY_SERVICE_PORT:-8002} uv run uvicorn src.main:app",
         "cwd": "apps/memory-service"
       }
     },

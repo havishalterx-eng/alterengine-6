@@ -92,9 +92,9 @@ function createEvalModelProvider(): ModelProvider {
 
 async function bootstrap(): Promise<void> {
   const environment = loadModelGatewayEnvironment(process.env);
-  if (environment.configSource !== "mock") {
+  if (environment.runtimeMode !== "mock") {
     throw new Error(
-      "eval_bootstrap_bedrock only supports ALTER_CONFIG_SOURCE=mock -- use main.ts for a real " +
+      "eval_bootstrap_bedrock only supports RUNTIME_MODE=mock -- use main.ts for a real " +
         "AWS AppConfig-backed deployment.",
     );
   }

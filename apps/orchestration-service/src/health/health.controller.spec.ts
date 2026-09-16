@@ -12,6 +12,7 @@ describe("GET /health", () => {
   beforeEach(async () => {
     const config = {
       NODE_ENV: "production",
+      RUNTIME_MODE: "real",
       INGRESS_SESSION_GATEWAY_CORE_ENABLED: "true",
       AUTH0_DOMAIN: "tenant.auth0.com",
       AUTH0_API_AUDIENCE: "alter-engine",

@@ -41,7 +41,7 @@ import { TOOLGW_PROTO_PATH } from "./gateway/grpc.constants";
  * and unmodified: the same real ResolveCredential/InvokeTool code paths,
  * same real in-memory #credentialTokens map, same real
  * assertCredentialReferenceOwnedBy ownership check run under production
- * main.ts with ALTER_CONFIG_SOURCE=mock.
+ * main.ts with RUNTIME_MODE=mock.
  *
  * The ONE difference from running the real main.js directly: production's
  * createMockSecretsProvider() call takes no options, so it only ever seeds
