@@ -295,7 +295,7 @@ cannot heal itself.
       second is the one most likely to be incomplete: selection now ranks on containment,
       similarity, performance and efficiency (PR #9), and whether a drift score reaches that
       ranking at all is an open question. Phase 2 does not close until this does.
-- [ ] **2.4 prove the cycle — SPLIT 2026-09-15 into 2.4a and 2.4b above.** Real
+- [x] **2.4 prove the cycle — SPLIT 2026-09-15 into 2.4a and 2.4b, both closed 2026-09-16.** Real
       failing nodes were run against Recovery on alter-x-4- and reclassified correctly
       (#150, #151, #166), but **nobody has watched the full circuit** — recovery, memory
       write-back, and a drift score that changes the next selection — and nobody has watched
