@@ -463,6 +463,11 @@ person, Track B competes with the engine rather than running beside it. Take **B
 **B4** early anyway — one lies, the others are additive and safe — and defer the rest until
 the demo runs.
 
+- [ ] **B6 [+] a trigger can never be removed.** B5 made the control refuse honestly, which is
+      correct and leaves a real product gap: `platform-api`'s trigger controller has no `DELETE`
+      at all, so nothing can remove a trigger by any route. Surfaced by PR #12's honest refusal
+      rather than fixed by it. Decide whether removal is disable-only by design, or whether the
+      route is simply missing.
 - [ ] **B1 admin console** — 14 screens, 8 modules. Largest single block of
       finished-but-unreachable work. The plan says start here; solo, it does not.
 - [ ] **B2 commerce** — Marketplace (8 methods), Publisher & Payout (fully mock), Cost &
@@ -470,13 +475,24 @@ the demo runs.
 - [ ] **B3 the rest** — Notifications (7), Benchmarking (7), Discovery (2), Search. **Search
       returns invented results** — the one actively misleading item. Tool Registry and Media
       Services were source-read only; confirm live before counting them.
-- [ ] **B4 four missing routes** — additive, safe. Run cancel, run retry-node,
+- [x] **B4 four missing routes — CLOSED 2026-09-16, PR #12.** Run cancel, run retry-node,
+      `GET /projects`, `GET /projects/:id`, with workspace and tenant scoping. Original scope: — additive, safe. Run cancel, run retry-node,
       `GET /projects`, `GET /projects/:id`. Nothing depends on them. Good first tickets.
-- [ ] **B5 trigger management** — silently lying. `testTrigger` and `removeTrigger` report
+- [x] **B5 trigger management — CLOSED 2026-09-16, PR #12.** `testTrigger` now throws when the
+      response carries no event id instead of manufacturing success; `removeTrigger` **refuses
+      honestly** — "no delete route exists. Disable the trigger instead." Verified independently:
+      the trigger controller has create, list, get, versions, enable, test and rotate, and **no
+      delete**, so the refusal is true and points at a route that exists. Artefact asserts on the
+      **call** (`toHaveBeenCalledExactlyOnceWith` on url, method, body, credentials), not the
+      rendered result, which is what catches a control reporting success with nothing behind it.
+      Opens **B6**. Original scope: — silently lying. `testTrigger` and `removeTrigger` report
       success without calling anything. **Prioritise above cosmetic items:** a control that
       claims to have deleted something and has not is worse than one that does nothing
       visible.
-- [ ] **B-vocab** — from decision 0.5, now answered. Human Action Centre adopts the engine's
+- [x] **B-vocab — CLOSED 2026-09-16, PR #12.** Platform moved to
+      `pending·approved·rejected·expired`; `open` is now rejected at both the client and the query
+      parser with "Unsupported approval status". **Engine enum untouched**, per decision 0.5.
+      Original scope: — from decision 0.5, now answered. Human Action Centre adopts the engine's
       enum (`pending·approved·rejected·expired`).
 
 **Done when** every screen issues real requests, and no control reports success without a
