@@ -42,6 +42,7 @@ describe("IdentityBrokerModule", () => {
     await moduleRef.close();
 
     process.env.NODE_ENV = "production";
+    process.env.RUNTIME_MODE = "real";
     await expect(
       Test.createTestingModule({ imports: [IdentityBrokerModule] }).compile(),
     ).rejects.toThrow("Mock signing keys are restricted to NODE_ENV=test");
