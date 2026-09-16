@@ -327,6 +327,40 @@ recommendation was still wrong, in the direction of proposing work that was alre
 **Saying "I could not find it" is not a substitute for finding it** when the answer changes
 what gets built.
 
+### 2026-09-16 — a full design-log conformance pass, after the builds, not during
+
+**Decision.** Once Phase 4, Track A, Track B and Track C are finished, compare the **entire**
+build against the design log and adapt the engine to it. Not a spot check of the sections
+someone happens to be touching — the whole document against the whole system.
+
+**Why after rather than during.** Track C was created to hold the engine to the log's standards
+*as work lands*, and it works for the items it names. What it cannot do is find divergences in
+components nobody is currently editing, because nothing prompts anyone to look. Today's §4
+audit is the proof: the healing loop's spine matches the log exactly, and three divergences had
+been sitting there unnoticed — **no idempotency gate in front of Dispatch** (§4 calls it
+cross-cutting and mandatory; C8), **no post-hoc user notification** of what self-heal did (§4
+requires it, nothing does it), and **`safety_violation` handled inside Recovery** when §4 says
+safety must halt the whole workflow before Recovery is ever invoked. None of those were on the
+board before someone read §4 against the code on purpose.
+
+**Why not now.** Doing it before the builds land means auditing code that is about to change,
+and re-auditing it afterwards. Phase 4 rewrites the Planner and the Synthesizer — two of the
+components most likely to diverge — so a conformance pass that precedes them measures the wrong
+system.
+
+**Scope when it runs.** All 33 design-log sections against all 61 components, including the
+four architecture documents adopted as binding in decision 0.7. Divergences are recorded before
+they are fixed, the same way Track C items are, so "the log says X and the code does Y" is never
+resolved by quietly changing the log.
+
+**Expected shape of the result, stated in advance so nobody is surprised.** Some divergences
+will be the code being right and the log being stale — §4's five classify buckets against the
+code's ten failure classes is likely one, and the log itself flagged that taxonomy for
+refinement. The pass must be able to conclude "amend the log" as readily as "change the code",
+or it becomes a ratchet that treats a year-old document as infallible.
+
+**Decided by.** Havish.
+
 ---
 
 ## 3. Checklist context

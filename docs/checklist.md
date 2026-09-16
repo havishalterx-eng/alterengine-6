@@ -707,6 +707,31 @@ demo.
 
 ---
 
+## Track D [+] — design-log conformance, after the builds
+
+**Decided 2026-09-16 by Havish.** Runs once Phase 4, Track A, Track B and Track C are finished.
+Reasoning in [`memoryalter.md` §2](memoryalter.md#2-decisions).
+
+- [ ] **D1 the whole log against the whole system.** All 33 design-log sections against all 61
+      components, plus the four architecture documents made binding by decision 0.7. Not a spot
+      check of whatever someone is editing — that is what Track C already does, and Track C
+      cannot find divergences in components nobody is touching.
+- [ ] **D2 record before fixing.** Every divergence written down before it is resolved, so "the
+      log says X and the code does Y" is never settled by quietly editing the log.
+- [ ] **D3 the log may be the thing that is wrong.** The pass must be able to conclude *amend
+      the log* as readily as *change the code*. §4's five classify buckets against the code's ten
+      failure classes is the known candidate, and §4 itself flagged that taxonomy for refinement.
+
+**Why after, not now.** Phase 4 rewrites the Planner and the Synthesizer, two of the components
+most likely to diverge, so a pass that precedes it measures a system about to change.
+
+**Already banked, found by reading §4 against the code on 2026-09-16** — a preview of what this
+track is for: no idempotency gate in front of Dispatch (C8), no post-hoc user notification of
+what self-heal did, and `safety_violation` handled inside Recovery when §4 says safety halts the
+workflow before Recovery is invoked.
+
+---
+
 ## Standing rules
 
 1. **Do not touch the 25 Category 1 components.** No logic change, no code change. Anything
