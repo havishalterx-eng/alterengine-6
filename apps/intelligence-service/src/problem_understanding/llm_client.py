@@ -43,6 +43,13 @@ Keys, with the exact type each must have:
 Every array must be a JSON array even when it is empty or holds one item.
 Emit no key that is not listed above. Never invent facts missing from the
 context; record each missing fact as a string in missing_information."""
+_ALTER_AUTHORED_SYSTEM_PROMPTS = frozenset({_SYSTEM_PROMPT})
+
+
+def _alter_authored_system_message(content: str) -> dict[str, object]:
+    if content not in _ALTER_AUTHORED_SYSTEM_PROMPTS:
+        raise ValueError("alter_authored system prompt must be a registered module-level constant")
+    return {"role": "system", "content": content, "alter_authored": True}
 
 # How much of an unusable reply to carry into the log. Enough to see what
 # shape came back, short enough not to spill a full generation into it.
@@ -95,7 +102,7 @@ class ModelGatewayProblemUnderstandingClient:
         payload = json.dumps(
             {
                 "messages": [
-                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    _alter_authored_system_message(_SYSTEM_PROMPT),
                     {
                         "role": "user",
                         "content": json.dumps(

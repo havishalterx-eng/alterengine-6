@@ -207,12 +207,26 @@ Respond with a single JSON object only, no other text, no markdown code fences:
 {"strategy": "<direct|iterative|manager_worker>", "reason": "<one sentence>"}"""
 
 WORKFLOW_STRATEGIES = frozenset({"direct", "iterative", "manager_worker"})
+_ALTER_AUTHORED_SYSTEM_PROMPTS = frozenset(
+    {
+        _SKELETON_SYSTEM_PROMPT,
+        _REPLAN_SYSTEM_PROMPT,
+        _MANAGER_WORKER_SYSTEM_PROMPT,
+        _STRATEGY_SYSTEM_PROMPT,
+    }
+)
+
+
+def _alter_authored_system_message(content: str) -> dict[str, object]:
+    if content not in _ALTER_AUTHORED_SYSTEM_PROMPTS:
+        raise ValueError("alter_authored system prompt must be a registered module-level constant")
+    return {"role": "system", "content": content, "alter_authored": True}
 
 
 def strategy_payload(objective: str) -> dict[str, object]:
     return {
         "messages": [
-            {"role": "system", "content": _STRATEGY_SYSTEM_PROMPT},
+            _alter_authored_system_message(_STRATEGY_SYSTEM_PROMPT),
             {"role": "user", "content": objective},
         ],
         "temperature": 0,
@@ -377,7 +391,7 @@ def _payload(system_prompt: str, user_content: str, *, temperature: float) -> st
     return json.dumps(
         {
             "messages": [
-                {"role": "system", "content": system_prompt},
+                _alter_authored_system_message(system_prompt),
                 {"role": "user", "content": user_content},
             ],
             "temperature": temperature,
@@ -400,7 +414,7 @@ def _repair_payload(problem_spec_json: str, plan: str, problems: list[str]) -> s
     return json.dumps(
         {
             "messages": [
-                {"role": "system", "content": _SKELETON_SYSTEM_PROMPT},
+                _alter_authored_system_message(_SKELETON_SYSTEM_PROMPT),
                 {"role": "user", "content": problem_spec_json},
                 {"role": "assistant", "content": plan},
                 {

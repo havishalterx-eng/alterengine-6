@@ -12,9 +12,15 @@ from src.planner.model_gateway_llm_client import (
     _SKELETON_SYSTEM_PROMPT,
     _TOOL_REFERENCE,
     ModelGatewayLlmClient,
+    _alter_authored_system_message,
     _executable_problems,
 )
 from src.planner.task_skeleton import TaskNode, TaskSkeleton
+
+
+def test_rejects_an_interpolated_alter_authored_system_prompt() -> None:
+    with pytest.raises(ValueError, match="registered module-level constant"):
+        _alter_authored_system_message(f"{_SKELETON_SYSTEM_PROMPT}\ntenant={_RUN}")
 
 
 class _RecordingStub:
@@ -107,6 +113,8 @@ async def test_classify_workflow_strategy_sends_objective_and_returns_model_choi
     assert stub.request.run_id == "run_018f4d6e-2b4a-7a3e-8c1a-1234567890ab"
     payload = json.loads(stub.request.input_json)
     assert payload["temperature"] == 0
+    assert payload["messages"][0]["alter_authored"] is True
+    assert "alter_authored" not in payload["messages"][1]
     assert payload["messages"][1] == {
         "role": "user",
         "content": "Localize the app into four languages",
@@ -348,6 +356,9 @@ async def test_generate_skeleton_repairs_an_invented_tool_name_once() -> None:
     assert [message["role"] for message in messages] == ["system", "user", "assistant", "user"]
     assert messages[2]["content"] == invented
     assert "'youtube_upload', which is not a tool" in messages[3]["content"]
+    # Only the constant system prompt is exempt from gateway redaction; the
+    # model's own plan and the repair request are redacted like user text.
+    assert [message.get("alter_authored") for message in messages] == [True, None, None, None]
 
 
 async def test_generate_skeleton_repairs_an_answer_that_is_not_json() -> None:
