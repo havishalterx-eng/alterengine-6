@@ -423,11 +423,13 @@ export interface TestResult {
 // Phase 5 Types
 
 export type HumanActionType = "approval" | "clarification" | "escalation"
+// Engine approval API vocabulary. UI tabs use HumanActionTab below.
 export const approvalStatuses = ["pending", "approved", "rejected", "expired"] as const
 export type ApprovalStatus = typeof approvalStatuses[number]
 // Approval API status is separate from UI action lifecycle status.
 export type HumanActionStatus = "open" | "claimed" | "resolved" | "expired" | "cancelled"
-export interface HumanActionFilters { status?: ApprovalStatus; type?: HumanActionType }
+export type HumanActionTab = "open" | "claimed" | "resolved" | "all"
+export interface HumanActionFilters { status?: HumanActionTab; type?: HumanActionType }
 export type HumanActionResolution = "approved" | "rejected" | "answered" | "resolved" | "dismissed"
 export type HumanActionPriority = "low" | "normal" | "high" | "critical"
 
