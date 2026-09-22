@@ -420,6 +420,46 @@ component, the builder **stops and reports** rather than extending this exemptio
 - **When.** 2026-09-16.
 - **Where.** `apps/intelligence-service/src/planner/`, design log §5.2 and §5.3.
 
+### 2026-09-22 — the second import is the last: exemption granted, consolidation decided
+
+**Decided by the CEO session under Havish's explicit delegation on 2026-09-22** ("make the best
+decision by yourself"). Recorded before any code moves, as standing rule 1 requires.
+
+**1. Freeze exemption for this import only.** Graph Compiler (#176, #178, #182, #191), the node
+registry (#179, #191) and Model Gateway (#192), for importing alter-x-4- #172–#193 and nothing
+else. **Why it is right now when it was not on 2026-09-07:** the freeze protects known-good code
+from becoming unknown. For these three, our copies are no longer the known-good ones. Our Planner's
+replan is a stub that returns the same plan unchanged; theirs is real, tested, and measured. Keeping
+ours frozen would preserve the worse version. The protection that still matters — that nothing
+breaks — is supplied by their two test sets, our healing-loop test, our C29 tests and CI.
+
+**Condition on Model Gateway.** #192 lets a system message marked `alter_authored: true` skip
+personal-data redaction. **The gateway trusts that flag from any caller and never checks the
+content** (`model-gateway.service.ts`, `#redactInvocationPayload`), and the Planner's generic
+`_payload(system_prompt, ...)` helper sets it for every caller. Today every caller passes a
+module-level constant and tenant data travels in the redacted user message, so it is safe. It is a
+**convention, not a guarantee**, and this import creates the specific way to break it: re-applying
+our C29 criteria work onto their Planner could put tenant-written success criteria into a flagged
+system prompt, sending them to a model provider unredacted. Neither repository has that risk alone.
+So the import must add a test that fails if any `alter_authored` message carries non-constant
+content, and tenant text — criteria included — stays in the user message.
+
+**2. This is the last import. After it merges, alterengine-6 is the only repository.** Once the
+import lands, this repository is a strict superset: their engine work plus our record, CI gates,
+infrastructure and C29. That is the moment to consolidate, and not doing it would mean paying the
+migration cost without collecting the benefit. The tax is real — they merged 22 pull requests in a
+week, each import costs one to two days of builder time, and the collisions land on the engine's
+most important files. **Why here rather than there:** moving the other way would mean porting our
+record and our CI gates into a repository that has neither, while their own `AGENTS.md` already
+carries our working rules. **Action needed from Havish, not the CEO session:** tell Surya and
+Satwik that building moves to alterengine-6 once this import merges. They have been quiet since
+2026-09-19, which makes now a clean window.
+
+**3. A defect in the first version of the import prompt, found by attacking it.** It restored git
+ancestry with `git merge -s ours x4/main`. If alter-x-4- merges anything while the builder works,
+that command would record as imported a pull request this repository never received, and the next
+import would silently skip it. **Pinned to `092f148` (#193) instead.**
+
 ---
 
 ## 3. Checklist context
