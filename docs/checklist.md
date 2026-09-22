@@ -380,7 +380,12 @@ creating agents.
 handed decisions made by string matching. These are rewrites, not repairs — and safe to
 schedule late, because what L6 consumes is a plan, not the Planner.
 
-- [ ] **4.1 planner rewrite.** A padded trivial lookup escalates to manager-worker while a
+- [!] **4.1 planner rewrite — IMPORTED (PR #16), NOT REPRODUCED HERE.** Their model-backed
+      selection with keyword fallback scores 35/36 on their machine. Here: **27/36 on Qwen** (our
+      task 1.5 binding) and **17/36 on Nova Lite with all 28 calls falling back** — exactly the
+      pre-rewrite keyword score. **Every Nova model in `ap-south-1` is `INFERENCE_PROFILE` only and
+      cannot be invoked by a bare model id**, which this repository recorded on 2026-09-09 and
+      nobody connected. **Blocked on C31, not on code.** Original scope: A padded trivial lookup escalates to manager-worker while a
       real three-team, twelve-country migration in 28 words does not — **the classification
       is inverted relative to actual scope.** Replace with a model call behind the same
       contract, keeping the keyword path as a fallback for provider outages.
@@ -747,6 +752,18 @@ demo.
       subsystem, as this item predicted**, and it is the same work as C29. Original scope: — structured success criteria and mechanical
       read-back. **Absence is currently inferred, not established.** Check before scheduling;
       if genuinely missing this is a subsystem, not a patch.
+
+---
+
+- [ ] **C30 [+] design log §16's four approval modes do not exist.** Not always-block, not
+      auto-approve, not skip-on-timeout, not approve-once-then-promote. The imported code places a
+      gate before qualifying external side effects — placement without modes. Found during the
+      #172–#193 import. Decide whether §16 gets built or amended; Track D owns the second option.
+- [ ] **C31 [+] bind the model aliases to invocable ids, then re-measure 4.1.** Every Nova model in
+      `ap-south-1` needs an inference profile ARN; a bare id fails every call and the keyword
+      fallback hides it. Bind `STANDARD` to a working profile, re-run the planner golden set, close
+      4.1 only if it clears 0.90 here. **The finding worth keeping: a fallback masking a total
+      provider failure reads as a mediocre score, not as an outage.**
 
 ---
 

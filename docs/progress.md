@@ -60,6 +60,9 @@ Format: `YYYY-MM-DD · task · what was demonstrated · who verified`
 - `2026-09-16 · C25 · answered, not a gap: 21 project targets already have real per-project lint (ESLint/Ruff/Oxlint); no root eslint.config needed`
 - `2026-09-16 · C29 slice 1 · success criteria carry ProblemSpec to skeleton to architecture to compiled DAG to stored version; workflows without criteria still compile · PR #14 merged, CI green on the merged sha (7fc6fab), proven to fail by removing the carry`
 - `2026-09-16 · C29 slice 2a · Planner assigns intake criteria to named nodes; unassigned criteria AND invented ones both fail validation; global list retained at root for slice 3 · PR #15 merged, CI green on the merged sha (50aa7dc), proven to fail with DID NOT RAISE PlannerExecutionError`
+- `2026-09-22 · import 2 · all 22 of alter-x-4-'s PRs #172-#193 landed with our C29 work re-applied, ancestry recorded at 092f148, CI green on the merged head · PR #16 merged; the last import`
+- `2026-09-22 · 2.2 · replan is real: returns a revised skeleton and rejects an identical one · verified, replan guards 9/9, healing loop 2/2 — corrects 2.4a, where the Planner got the right plan and changed nothing`
+- `2026-09-22 · 4.1 · NOT reproduced here: 27/36 on Qwen, 17/36 on Nova with 28 of 28 calls falling back, against a 0.90 floor · root cause confirmed live, every Nova model in ap-south-1 is INFERENCE_PROFILE only`
 
 ---
 
