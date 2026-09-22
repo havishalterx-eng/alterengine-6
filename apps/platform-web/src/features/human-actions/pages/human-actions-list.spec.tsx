@@ -8,19 +8,19 @@ vi.mock("@/api/http", async (importOriginal) => ({ ...await importOriginal<typeo
 vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }))
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
-it("Revive B-vocab tabs issue canonical approval status requests", async () => {
+it("Human Actions tabs fetch engine statuses and filter client-side", async () => {
   const request = vi.fn<typeof fetch>().mockImplementation(async () => Response.json({ data: [] }))
   vi.stubGlobal("fetch", request)
   const user = userEvent.setup()
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const view = render(<QueryClientProvider client={client}><HumanActionsList /></QueryClientProvider>)
   await waitFor(() => expect(request).toHaveBeenCalledTimes(1))
-  expect(String(request.mock.calls[0]![0])).toContain("status=pending")
-  for (const status of ["approved", "rejected", "expired"]) {
+  expect(String(request.mock.calls[0]![0])).not.toContain("status=")
+  for (const tab of ["Claimed", "Resolved"]) {
     request.mockClear()
-    await user.click(view.getByRole("tab", { name: new RegExp(status, "i") }))
+    await user.click(view.getByRole("tab", { name: tab }))
     await waitFor(() => expect(request).toHaveBeenCalledTimes(1))
-    expect(String(request.mock.calls[0]![0])).toContain(`status=${status}`)
+    expect(String(request.mock.calls[0]![0])).not.toContain("status=")
   }
   request.mockClear()
   await user.click(view.getByRole("tab", { name: /^All$/ }))
