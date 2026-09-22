@@ -1,6 +1,10 @@
 # Import alter-x-4- #172–#193 into alterengine-6 — context and master prompt
 
-**For a Codex builder.** Part A is the context you need and cannot get elsewhere. Part B is the
+**For a Codex builder. This is the LAST import.** Once it merges, alterengine-6 becomes the only
+repository and building on alter-x-4- stops (decided 2026-09-22, see `docs/memoryalter.md`).
+Nothing needs to be preserved for a third import; everything needs to be right for the only copy.
+
+Part A is the context you need and cannot get elsewhere. Part B is the
 task. Read both in full before touching anything. **Part B begins with a planning round: send back
 your plan and your disagreements, and do not write code until Havish or the CEO session replies.**
 
@@ -118,19 +122,37 @@ B0. PLANNING ROUND -- NO CODE YET
     - anything you need decided.
   Then STOP and wait for a reply.
 
-B1. FROZEN COMPONENTS -- CHECK THE RECORD BEFORE EACH ONE
+B1. FROZEN COMPONENTS -- THE EXEMPTION IS GRANTED, WITH ONE CONDITION
 
   These pull requests change Category 1 components:
     Graph Compiler:   #176, #178, #182, #191
     Node registry:    #179, #191
     Model Gateway:    #192   (five direct dependents -- highest blast radius)
 
-  Before landing any of them, confirm docs/memoryalter.md contains a
-  dated exemption entry covering that component FOR THIS IMPORT. The
-  existing C29 exemption covers Graph Compiler only for carrying success
-  criteria, not for these changes. If the entry is not there, land
-  everything else and STOP at the first frozen pull request. Report which
-  entry you need.
+  The exemption covering all three FOR THIS IMPORT ONLY is recorded in
+  docs/memoryalter.md, dated 2026-09-22. Read that entry before you start.
+  Any OTHER Category 1 component means stop and report; do not extend the
+  exemption by inference.
+
+  THE CONDITION, and it is the one real safety risk in this import:
+  #192 lets a system message marked `alter_authored: true` skip personal-
+  data redaction. The gateway trusts that flag from ANY caller and never
+  checks the content (#redactInvocationPayload in
+  model-gateway.service.ts), and the Planner's generic
+  _payload(system_prompt, ...) helper sets it for every caller. Today every
+  caller passes a module-level constant, so it is safe -- by convention
+  only.
+
+  This import is exactly how that convention breaks: when you re-apply our
+  C29 criteria work onto their Planner (B4a), success criteria are TENANT-
+  WRITTEN TEXT. They must travel in the redacted USER message. They must
+  NEVER be interpolated into a system prompt that carries alter_authored.
+
+  Add a test that FAILS if any message marked alter_authored carries
+  content that is not a registered module-level constant. Prove it fails
+  by interpolating a criterion into a flagged system prompt. This turns a
+  convention into a check, which is what docs/verification-standard.md
+  requires.
 
 B2. STAGING BRANCH
 
@@ -246,14 +268,18 @@ B5. PRESERVE OUR TESTS
 
 B6. RESTORE THE ANCESTRY -- LAST, AND ONLY AFTER ALL 22 ARE IN
 
-  git merge -s ours x4/main -m "Record alter-x-4- as merged through #193"
+  git merge -s ours 092f148 -m "Record alter-x-4- as merged through #193"
 
   This tells git the repository now contains their work through #193
   without changing a single file. It is what makes the NEXT import a
   normal merge instead of this. Running it before every pull request is
   in would falsely claim work this repository does not have.
-  Verify afterwards: git merge-base origin/main x4/main should return
-  x4/main's head.
+  PINNED to 092f148 (#193), NOT to x4/main. If alter-x-4- merges anything
+  while you work, `-s ours x4/main` would record as imported a pull request
+  this repository never received, and the next import would silently skip
+  it. Before running it, confirm 092f148 is still the commit you imported
+  up to, and report whether x4/main has moved past it.
+  Verify afterwards: git merge-base HEAD 092f148 should return 092f148.
 
 B7. VERIFY, THEN OPEN THE PULL REQUEST
 
@@ -271,7 +297,13 @@ REPORT -- verbatim output, not summaries
   3. Every frozen-component file changed, per component.
   4. The product rules from B4e, each with its design-log section.
   5. The section 16 finding from B4f.
-  6. Anything in this file or the integration report that turned out to
+  6. The alter_authored test from B1: its verbatim failure and its pass.
+  7. Confirmation that after #174, our 2.4a healing-loop test still passes
+     AND that replan now returns a DIFFERENT plan. Before #174 our replan
+     was a stub returning the same plan; the CEO session will correct the
+     Phase 2 record from your evidence.
+  8. Whether x4/main moved past 092f148 while you worked.
+  9. Anything in this file or the integration report that turned out to
      be wrong. That is the most valuable part of the report.
 
   A report saying everything was clean is the least useful one you can
