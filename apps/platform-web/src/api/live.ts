@@ -1,6 +1,5 @@
 import { apiDelete, apiGet, apiPatch, apiPost, mutationKey } from "./http"
 import { compileDag } from "./compile-dag"
-import { approvalStatuses } from "./types"
 import type {
   HumanActionFilters,
   Artifact,
@@ -38,7 +37,6 @@ import type {
   IntegrationCategory,
   Connection,
   WhatsAppChannel,
-  VoiceChannel,
 } from "./types"
 
 type AnyRecord = Record<string, any>
@@ -903,90 +901,6 @@ function mapWhatsAppChannel(value: unknown): WhatsAppChannel {
   }
 }
 
-export async function getVoiceChannels(): Promise<VoiceChannel[]> {
-  // getVoiceChannels()'s own return type is a flat array (no pagination
-  // UI anywhere that calls it), and 200 is the endpoint's own max page
-  // size -- a workspace with more bound numbers than that would silently
-  // see only the first page here, same disclosed limit as
-  // getKnowledgeSources().
-  const body = await apiGet<unknown>("/api/v1/channels/voice/numbers?limit=200")
-  return asArray(body, "data").map(mapVoiceChannel)
-}
-
-// The real create body (CreateVoiceNumberBindingRequest: workspace_id,
-// provider, phone_number, credential_reference, call_handling) needs a
-// credential_reference (an opaque pointer to a stored provider secret)
-// and an inbound_calls_enabled flag that Partial<VoiceChannel> has no
-// representation for at all -- there is no number-provisioning UI yet to
-// collect either. Same posture as createWhatsAppChannel: real fields are
-// mapped through, the rest must arrive as extra properties on `data`,
-// and the real endpoint's own strict validation is what rejects a
-// request that's missing them.
-export async function createVoiceChannel(data: Partial<VoiceChannel>): Promise<VoiceChannel> {
-  const input = data as AnyRecord
-  const body = {
-    workspace_id: input.workspaceId,
-    provider: data.provider === "twilio" ? "twilio" : input.provider,
-    phone_number: data.phoneNumber,
-    credential_reference: input.credentialReference,
-    call_handling: {
-      inbound_calls_enabled: Boolean(input.inboundCallsEnabled),
-      voice_style: {
-        language_tag: data.language ?? "en-US",
-        ...(data.voice ? { voice_style: data.voice } : {}),
-      },
-    },
-  }
-  const created = await apiPost<unknown>("/api/v1/channels/voice/numbers", body, {
-    idempotencyKey: mutationKey("voice-channel-create"),
-  })
-  return mapVoiceChannel(created)
-}
-
-function mapVoiceChannel(value: unknown): VoiceChannel {
-  const item = value as AnyRecord
-  const phoneNumber = typeof item.phone_number === "string" ? item.phone_number : undefined
-  const callHandling = (item.call_handling ?? {}) as AnyRecord
-  const voiceStyle = (callHandling.voice_style ?? {}) as AnyRecord
-  return {
-    id: asString(item.id),
-    // No display name exists on the real binding either -- the bound
-    // phone number is a real, meaningful stand-in (how a person would
-    // actually refer to this line), not a fabricated label.
-    name: phoneNumber ?? asString(item.id),
-    provider: mapVoiceProvider(item.provider),
-    phoneNumber,
-    status: mapVoiceStatus(item.status),
-    voice: typeof voiceStyle.voice_style === "string" ? voiceStyle.voice_style : undefined,
-    language: typeof voiceStyle.language_tag === "string" ? voiceStyle.language_tag : undefined,
-    createdAt: asDate(item.created_at),
-  }
-}
-
-// Real providers are "exotel" | "twilio" (VoiceProviderKindSchema in
-// @alterx/contracts). The frontend enum has no "exotel" option at all --
-// falls back to "vonage" as the closest existing "some other real
-// provider" bucket. Approximate and disclosed, not a claim that Exotel
-// bindings are literally Vonage.
-function mapVoiceProvider(value: unknown): VoiceChannel["provider"] {
-  return value === "twilio" ? "twilio" : "vonage"
-}
-
-// Real status is pending|active|suspended|failed (VoiceAccountStatusSchema)
-// against the frontend's connected|pending|degraded|disconnected -- this
-// one maps cleanly and completely, no value left undecided:
-// pending -> pending (exact), active -> connected, suspended -> degraded
-// (a recoverable, non-terminal hold), failed -> disconnected (not usable
-// at all, the more terminal reading).
-function mapVoiceStatus(value: unknown): VoiceChannel["status"] {
-  switch (value) {
-    case "pending": return "pending"
-    case "active": return "connected"
-    case "suspended": return "degraded"
-    default: return "disconnected"
-  }
-}
-
 function asArray(value: unknown, key: string): AnyRecord[] {
   if (Array.isArray(value)) return value as AnyRecord[]
   const record = (value ?? {}) as AnyRecord
@@ -1236,21 +1150,45 @@ function slugify(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
 }
 
+/**
+ * The Human Actions tabs span three sources with different lifecycles:
+ * approvals (pending/approved/rejected/expired), escalations
+ * (open/claimed/resolved) and clarifications (open/answered/expired).
+ * mapHumanActionStatus folds those into one vocabulary; a tab is a set of
+ * folded statuses, so Open is pending approvals plus open escalations and
+ * clarifications, and Resolved includes decisions that expired.
+ */
+export function humanActionInTab(status: HumanActionStatus, tab: string | undefined): boolean {
+  if (!tab || tab === "all") return true
+  if (tab === "resolved") return status === "resolved" || status === "expired" || status === "cancelled"
+  return status === tab
+}
+
+// ponytail: loads the whole queue and filters by tab here. Fine at today's
+// volumes; when it is not, give /api/v1/action-centre a status filter in
+// this folded vocabulary and page on the server.
+const HUMAN_ACTION_PAGE_LIMIT = 200
+const HUMAN_ACTION_MAX_PAGES = 10
+
 export async function getHumanActions(filters?: HumanActionFilters): Promise<HumanAction[]> {
-  const query = new URLSearchParams()
-  if (filters?.status !== undefined) {
-    if (!approvalStatuses.includes(filters.status)) throw new Error("Unsupported approval status")
-    query.set("status", filters.status)
+  // The action centre's own status filter speaks approvals' vocabulary only
+  // and drops escalations and clarifications when it is set, so the tab is
+  // never sent to it.
+  const items: unknown[] = []
+  let cursor: string | undefined
+  for (let page = 0; page < HUMAN_ACTION_MAX_PAGES; page += 1) {
+    const query = new URLSearchParams({ limit: String(HUMAN_ACTION_PAGE_LIMIT) })
+    if (cursor) query.set("cursor", cursor)
+    const body = await apiGet<unknown>(`/api/v1/action-centre?${query.toString()}`)
+    items.push(...asArray(body, "data"))
+    const next = ((body as AnyRecord | undefined)?.page as AnyRecord | undefined)?.next_cursor
+    if (typeof next !== "string" || next.length === 0) break
+    cursor = next
   }
-  // Action centre handles filtering by type implicitly via source_type, but here we just fetch everything and filter if needed, or rely on API.
-  // We'll hit the main action centre endpoint.
-  const body = await apiGet<unknown>(`/api/v1/action-centre?${query.toString()}`)
-  const items = asArray(body, "data")
-  let actions = items.map(mapHumanAction)
-  if (filters?.type) {
-    actions = actions.filter((a) => a.type === filters.type)
-  }
-  return actions
+  return items
+    .map(mapHumanAction)
+    .filter((action) => humanActionInTab(action.status, filters?.status))
+    .filter((action) => !filters?.type || action.type === filters.type)
 }
 
 export async function getHumanAction(id: string): Promise<HumanAction> {

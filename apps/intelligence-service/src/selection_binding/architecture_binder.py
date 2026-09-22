@@ -1,5 +1,6 @@
 """Registry- and ArchitectureSpec-driven concrete capability binding."""
 
+from src.architecture_synthesizer.registry_client import within_allowed
 from src.capability_registry.models import CapabilityRecord, CapabilitySearch
 from src.capability_registry.repository import CapabilityRegistryRepository
 
@@ -18,7 +19,18 @@ class ArchitectureBinder:
 
     async def bind(self, request: BindingRequest) -> ArchitectureBindingOutcome:
         bindings: list[BoundCapability] = []
-        for node in sorted(request.architecture.nodes, key=lambda value: value.source_node_key):
+        architecture = request.architecture
+        approval_policy = (
+            architecture.constraints.human_approval_required
+            or architecture.constraints.external_action_approval_required
+            or architecture.constraints.customer_visible
+        )
+        approved_before = {
+            boundary.before_node_key
+            for boundary in architecture.boundaries
+            if boundary.kind == "human_approval" and boundary.before_node_key is not None
+        }
+        for node in sorted(architecture.nodes, key=lambda value: value.source_node_key):
             role = node.capability_role
             if role is None:
                 continue
@@ -36,6 +48,16 @@ class ArchitectureBinder:
                     )
                 )
             eligible = [candidate for candidate in candidates if _eligible(candidate, request)]
+            # Synthesis left out the approval gate before this action because
+            # every record it saw was free of side effects. A record registered
+            # since then may not be, and binding it would run an unapproved
+            # external action, so only side-effect-free records stay eligible.
+            if (
+                approval_policy
+                and node.execution_kind == "deterministic"
+                and node.source_node_key not in approved_before
+            ):
+                eligible = [candidate for candidate in eligible if not candidate.side_effects]
             if not eligible:
                 return BindingBlocked(
                     source_node_key=node.source_node_key,
@@ -72,15 +94,12 @@ def _eligible(candidate: CapabilityRecord, request: BindingRequest) -> bool:
         candidate.constraints.required_permissions
     ).issubset(constraints.allowed_permissions):
         return False
-    if candidate.constraints.regions and not set(candidate.constraints.regions) & set(
-        constraints.allowed_regions
-    ):
+    # Same rule synthesis applied. Binding kept its own copy, which still treated
+    # a residency-restricted record as unusable by a tenant that sets no
+    # residency, so an architecture synthesis called ready was then blocked here.
+    if not within_allowed(candidate.constraints.regions, constraints.allowed_regions):
         return False
-    if candidate.constraints.data_residency and not set(candidate.constraints.data_residency) & set(
-        constraints.allowed_data_residency
-    ):
-        return False
-    return True
+    return within_allowed(candidate.constraints.data_residency, constraints.allowed_data_residency)
 
 
 def _score(candidate: CapabilityRecord, request: BindingRequest) -> tuple[float, dict[str, float]]:

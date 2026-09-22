@@ -2,6 +2,8 @@ import { PlannerClient, type PlannerHttpClient } from "@alterx/adapters";
 import { describe, expect, it, vi } from "vitest";
 
 import { PlannerFacadeService } from "./planner-facade.service";
+import { TenantDataResidencyError, type TenantResidencyRepository } from "./tenant-residency.repository";
+import { WorkflowSafeguardsError, type WorkflowSafeguardsService } from "./workflow-safeguards.service";
 import { CompilerServiceClient } from "./compiler-client";
 import type {
   CompilerCompileArchitectureWorkflowRequest,
@@ -86,9 +88,13 @@ class FakeCompilerGrpcClient {
   }
 }
 
+const NO_SAFEGUARDS = { customer_visible: false, contains_pii: false, approve_external_actions: false };
+
 function service(
   http: FakePlannerHttpClient,
   grpc: FakeCompilerGrpcClient,
+  allowedDataResidency: TenantResidencyRepository["allowedDataResidency"] = vi.fn().mockResolvedValue([]),
+  effectiveFor: WorkflowSafeguardsService["effectiveFor"] = vi.fn().mockResolvedValue(NO_SAFEGUARDS),
 ): PlannerFacadeService {
   const plannerClient = new PlannerClient({ baseUrl: "http://intelligence.internal" }, http);
   const compilerClient = new CompilerServiceClient(
@@ -97,10 +103,111 @@ function service(
   );
   return new PlannerFacadeService(
     { getAccessToken: vi.fn().mockResolvedValue("m2m-token") },
+    { allowedDataResidency } as TenantResidencyRepository,
+    { effectiveFor } as unknown as WorkflowSafeguardsService,
     plannerClient,
     compilerClient,
   );
 }
+
+function readyHttp(): FakePlannerHttpClient {
+  const http = new FakePlannerHttpClient();
+  http.understandResponse = realProblemSpec("Email the customers");
+  http.decomposeResponse = {
+    task_skeleton_json: JSON.stringify({ nodes: [], entry_point: "n1", version: "v1" }),
+    ambiguity_detected: false,
+    clarification_questions: [],
+  };
+  http.prepareCompilerInputResponse = { status: "ready", architecture: {}, binding_decision: {} };
+  return http;
+}
+
+function prepareBody(http: FakePlannerHttpClient): { constraints?: Record<string, unknown> } {
+  const call = http.calls.find((candidate) =>
+    candidate.url.endsWith("/internal/architecture-synthesis/prepare-compiler-input"),
+  );
+  return call!.body as { constraints?: Record<string, unknown> };
+}
+
+describe("PlannerFacadeService.planWorkflow constraints", () => {
+  it("sends the effective safeguards and the tenant's own residency to synthesis", async () => {
+    const http = readyHttp();
+    const residency = vi.fn().mockResolvedValue(["eu"]);
+    const effectiveFor = vi
+      .fn()
+      .mockResolvedValue({ customer_visible: true, contains_pii: true, approve_external_actions: true });
+
+    await service(http, new FakeCompilerGrpcClient(), residency, effectiveFor).planWorkflow({
+      tenantId: TENANT_ID,
+      workspaceId: WORKSPACE_ID,
+      workflowId: WORKFLOW_ID,
+      objective: "Email the customers",
+    });
+
+    expect(residency).toHaveBeenCalledWith(TENANT_ID);
+    expect(effectiveFor).toHaveBeenCalledWith(TENANT_ID, WORKSPACE_ID, WORKFLOW_ID);
+    // "Approve external actions" is external_action_approval_required, never
+    // human_approval_required, which would also hold delivered output.
+    expect(prepareBody(http).constraints).toEqual({
+      customer_visible: true,
+      contains_pii: true,
+      external_action_approval_required: true,
+      allowed_data_residency: ["eu"],
+    });
+  });
+
+  it("sends every safeguard off only when the workspace and workflow ask for none", async () => {
+    const http = readyHttp();
+
+    await service(http, new FakeCompilerGrpcClient()).planWorkflow({
+      tenantId: TENANT_ID,
+      workspaceId: WORKSPACE_ID,
+      workflowId: WORKFLOW_ID,
+      objective: "Email the customers",
+    });
+
+    expect(prepareBody(http).constraints).toEqual({
+      customer_visible: false,
+      contains_pii: false,
+      external_action_approval_required: false,
+      allowed_data_residency: [],
+    });
+  });
+
+  it("does not plan when the safeguards cannot be read", async () => {
+    const http = readyHttp();
+    const grpc = new FakeCompilerGrpcClient();
+    const effectiveFor = vi.fn().mockRejectedValue(new WorkflowSafeguardsError("workspace not found"));
+
+    await expect(
+      service(http, grpc, undefined, effectiveFor).planWorkflow({
+        tenantId: TENANT_ID,
+        workspaceId: WORKSPACE_ID,
+        workflowId: WORKFLOW_ID,
+        objective: "Email the customers",
+      }),
+    ).rejects.toBeInstanceOf(WorkflowSafeguardsError);
+    expect(http.calls.some((call) => call.url.endsWith("/prepare-compiler-input"))).toBe(false);
+    expect(grpc.compileArchitectureWorkflowCalls).toHaveLength(0);
+  });
+
+  it("does not plan when the tenant's residency cannot be read", async () => {
+    const http = readyHttp();
+    const grpc = new FakeCompilerGrpcClient();
+    const residency = vi.fn().mockRejectedValue(new TenantDataResidencyError("tenant data_residency is malformed"));
+
+    await expect(
+      service(http, grpc, residency).planWorkflow({
+        tenantId: TENANT_ID,
+        workspaceId: WORKSPACE_ID,
+        workflowId: WORKFLOW_ID,
+        objective: "Email the customers",
+      }),
+    ).rejects.toBeInstanceOf(TenantDataResidencyError);
+    expect(http.calls.some((call) => call.url.endsWith("/prepare-compiler-input"))).toBe(false);
+    expect(grpc.compileArchitectureWorkflowCalls).toHaveLength(0);
+  });
+});
 
 describe("PlannerFacadeService.planWorkflow", () => {
   it("real happy path: understand -> decompose -> prepare-compiler-input -> compile", async () => {

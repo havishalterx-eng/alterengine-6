@@ -17,6 +17,8 @@ import { RbacModule, type ActorContextType, type RbacRequest } from "../rbac";
 import { CompilerServiceClient } from "./compiler-client";
 import { PlannerFacadeController } from "./planner-facade.controller";
 import { PlannerFacadeService } from "./planner-facade.service";
+import type { TenantResidencyRepository } from "./tenant-residency.repository";
+import type { WorkflowSafeguardsService } from "./workflow-safeguards.service";
 import { ENGINE_M2M_TOKEN_PROVIDER } from "../engine/auth";
 import type {
   CompilerCompileArchitectureWorkflowRequest,
@@ -170,6 +172,12 @@ describe("PlannerFacadeController routes", () => {
   const http = new FakePlannerHttpClient();
   const grpc = new FakeCompilerGrpcClient();
   const store = new MemoryIdempotencyStore();
+  const residency = { allowedDataResidency: vi.fn().mockResolvedValue(["eu"]) };
+  const safeguards = {
+    effectiveFor: vi
+      .fn()
+      .mockResolvedValue({ customer_visible: false, contains_pii: true, approve_external_actions: true }),
+  };
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -181,6 +189,8 @@ describe("PlannerFacadeController routes", () => {
           useFactory: () =>
             new PlannerFacadeService(
               { getAccessToken: vi.fn().mockResolvedValue("m2m-token") },
+              residency as unknown as TenantResidencyRepository,
+              safeguards as unknown as WorkflowSafeguardsService,
               new PlannerClient({ baseUrl: "http://intelligence.internal" }, http),
               new CompilerServiceClient(
                 { address: "orchestration.internal:50071", protoPath: "/dev/null" },
@@ -297,19 +307,48 @@ describe("PlannerFacadeController routes", () => {
     expect(http.calls.filter((call) => call.url.endsWith("/planner/decompose"))).toHaveLength(1);
   });
 
+  it("plans with the stored safeguards and the tenant's residency", async () => {
+    const response = await request("POST", `/api/v1/workflows/${workflowId}/actions/plan`, actor, {
+      key: "plan-safeguards",
+      body: { goal: "Email the customers" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(safeguards.effectiveFor).toHaveBeenLastCalledWith(tenantId, workspaceId, workflowId);
+    const prepare = http.calls.filter((call) => call.url.endsWith("/prepare-compiler-input")).at(-1);
+    expect((prepare!.body as { constraints: unknown }).constraints).toEqual({
+      customer_visible: false,
+      contains_pii: true,
+      external_action_approval_required: true,
+      allowed_data_residency: ["eu"],
+    });
+  });
+
+  it.each([
+    ["safeguards sent per request", { constraints: { human_approval_required: true } }],
+    ["residency sent per request", { constraints: { allowed_data_residency: ["us"] } }],
+    ["any unknown field", { priority: "high" }],
+  ])("rejects %s with a 400 before any Planner call", async (_name, extra) => {
+    const before = http.calls.length;
+    const response = await request("POST", `/api/v1/workflows/${workflowId}/actions/plan`, actor, {
+      key: `plan-rejected-${JSON.stringify(extra)}`,
+      body: { goal: "Email the customers", ...extra },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect((response.json() as { error_code: string }).error_code).toBe("INVALID_PLAN_REQUEST");
+    expect(http.calls).toHaveLength(before);
+  });
+
   it("real body validation: a blank goal is rejected before any Planner call", async () => {
     const response = await request("POST", `/api/v1/workflows/${workflowId}/actions/plan`, actor, {
       key: "plan-invalid",
       body: { goal: "" },
     });
 
-    // Real current behavior, not the nicer one you might expect: this
-    // controller registers no exception filter of its own, and the
-    // thrown ZodError isn't caught by RBAC's global filter either, so it
-    // falls through to Nest's bare default 500 -- same gap as the
-    // blocked-architecture case below, documented rather than silently
-    // "fixed" by asserting the response shape this task didn't ask for.
-    expect(response.statusCode).toBe(500);
+    // Was a bare 500 from an uncaught ZodError; the body is now validated
+    // into a problem response, like any other client error.
+    expect(response.statusCode).toBe(400);
     expect(http.calls).toHaveLength(0);
   });
 

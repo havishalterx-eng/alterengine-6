@@ -27,6 +27,8 @@ export const platformApiEnvSchema = z
     SIGNING_KEY_PROVIDER: z.enum(["secrets", "mock"]).default("secrets"),
     RUNTIME_MODE: z.enum(["real", "mock"]).default("mock"),
     ACTOR_TOKEN_SIGNING_KEY_REF: z.string().min(1).optional(),
+    // Deprecated alias for ALTER_CONFIG_SOURCE.
+    PLATFORM_API_CONFIG_SOURCE: z.enum(["appconfig", "local-file"]).optional(),
     ALTER_CONFIG_SOURCE: z.enum(["appconfig", "local-file"]).default("local-file"),
     APPCONFIG_APP_ID: z.string().min(1).optional(),
     APPCONFIG_ENV_ID: z.string().min(1).optional(),
@@ -183,8 +185,30 @@ function requireFields<
 
 export type PlatformApiEnv = z.infer<typeof platformApiEnvSchema>;
 
-export function platformApiConfigSource(env: NodeJS.ProcessEnv): string | undefined {
-  return env.ALTER_CONFIG_SOURCE?.trim();
+let warnedLegacyMock = false;
+let warnedPlatformAlias = false;
+
+function warnOnce(message: string, alias: boolean): void {
+  if (alias ? warnedPlatformAlias : warnedLegacyMock) return;
+  if (alias) warnedPlatformAlias = true;
+  else warnedLegacyMock = true;
+  process.emitWarning(message, { type: "DeprecationWarning" });
+}
+
+export function platformApiConfigSource(
+  env: NodeJS.ProcessEnv = process.env,
+): "appconfig" | "local-file" {
+  const alias = env.PLATFORM_API_CONFIG_SOURCE?.trim();
+  if (alias === "appconfig" || alias === "local-file") {
+    warnOnce("PLATFORM_API_CONFIG_SOURCE is deprecated; use ALTER_CONFIG_SOURCE.", true);
+    return alias;
+  }
+  const source = env.ALTER_CONFIG_SOURCE?.trim();
+  if (source === "appconfig" || source === "local-file") return source;
+  if (source === "mock") {
+    warnOnce("ALTER_CONFIG_SOURCE=mock is deprecated; use RUNTIME_MODE=mock.", false);
+  }
+  return "local-file";
 }
 
 // The canonical AppConfig identifier names are the long forms

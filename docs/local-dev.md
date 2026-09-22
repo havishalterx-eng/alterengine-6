@@ -48,13 +48,12 @@ bootstrap refuses and names the stale-volume trap rather than letting it
 surface later as an authentication error. CI runs `scripts/bootstrap-env-local.sh --check`
 on every PR to keep the bootstrap honest.
 
-### Config source: mock is the default; AppConfig is a documented opt-in
+### Config source: local-file is the default; AppConfig is a documented opt-in
 
-The committed `.env.local.example` default is `ALTER_CONFIG_SOURCE=mock`, and
-the scoped overrides `AUDIT_CONFIG_SOURCE=local-file` and
-`PLATFORM_API_CONFIG_SOURCE=local-file` stay as they are. This is deliberate:
-making AppConfig the committed local default would tax every developer with
-AWS credentials just to start the stack. Mock is the recommended local mode.
+The committed `.env.local.example` default is `ALTER_CONFIG_SOURCE=local-file`.
+Set `RUNTIME_MODE=mock` for mock runtime behavior. This is deliberate: making
+AppConfig the committed local default would tax every developer with AWS
+credentials just to start the stack.
 
 **Running under real AWS AppConfig is an opt-in.** To prove a service runs
 against real AppConfig (not LocalStack), set `ALTER_CONFIG_SOURCE=appconfig`
@@ -94,11 +93,9 @@ exist even in mock mode. The resources the committed references name are:
 reference resolves against real AWS; it needs credentials and is gated behind
 `RUN_LIVE_REFERENCE_CHECK=1`.
 
-**Deployed environments** set `ALTER_CONFIG_SOURCE=appconfig` everywhere. In
-that world the two scoped overrides (`AUDIT_CONFIG_SOURCE`,
-`PLATFORM_API_CONFIG_SOURCE`) are redundant — they exist only to let a local
-file override the shared value — and can be dropped. That cleanup is noted
-here rather than done now, because the committed local default stays mock.
+**Deployed environments** set `ALTER_CONFIG_SOURCE=appconfig` everywhere.
+`PLATFORM_API_CONFIG_SOURCE` remains a deprecated compatibility alias only;
+new configuration must not use it.
 
 ## Start dependency stack
 
@@ -465,6 +462,27 @@ pnpm --filter @alterx/platform-api db:migrate
 NODE_ENV=development pnpm nx run platform-api:serve
 ```
 
+`db:migrate` applies **two** schemas: the drizzle-generated platform schema in
+`src/db/migrations`, then the hand-written marketplace schema in
+`src/db/marketplace-migrations` (the marketplace, publisher & payout, tool
+registry and marketplace-search tables). The second set runs against
+`MARKETPLACE_DATABASE_URL`, which points at the same `platform_db` by default
+but is its own variable and may point elsewhere.
+
+Until they were composed, nothing outside the integration specs applied the
+marketplace set, so `/api/v1/registry/tools` and every marketplace, publisher
+and search route answered 500 on a missing relation (issue #171). To run or
+reverse just that set:
+
+```bash
+pnpm --filter @alterx/platform-api db:migrate:marketplace
+pnpm --filter @alterx/platform-api db:rollback:marketplace     # all of it
+pnpm --filter @alterx/platform-api db:rollback:marketplace 1   # the last one
+```
+
+Both are idempotent: applied migrations are recorded in a
+`marketplace_migrations` table, so re-running applies nothing.
+
 Health check (HTTP, default port 3000):
 ```bash
 curl --fail --silent http://127.0.0.1:3000/health
@@ -496,8 +514,13 @@ Requires platform-db (Postgres, port 5432). `IDENTITY_PROVIDER` and
 (`apps/platform-api/src/identity/identity.module.ts`,
 `packages/adapters/src/ses/resolve-email-provider.ts`) â€” leave them unset
 and Auth0/Google OAuth and SES are already replaced by mock
-implementations, no `.env.local` entry needed. `ALTER_CONFIG_SOURCE=local-file`
-*is* set in `.env.local` and is what replaces AppConfig with the mock.
+implementations, no `.env.local` entry needed. AppConfig is replaced by
+`local-file`, which platform-api reads from `PLATFORM_API_CONFIG_SOURCE` --
+the scoped variable, set in `.env.local.example`. The shared
+`ALTER_CONFIG_SOURCE=mock` there is for the Engine services and is not a value
+platform-api accepts; an `.env.local` predating that entry fails every
+platform-api invocation, `db:migrate` included, with
+`Invalid platform-api environment: ALTER_CONFIG_SOURCE`.
 Marketplace still needs a real Postgres-backed `MARKETPLACE_DATABASE_URL`
 for entitlement and credential-guard specs.
 

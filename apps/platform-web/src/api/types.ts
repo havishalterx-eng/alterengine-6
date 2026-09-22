@@ -423,11 +423,13 @@ export interface TestResult {
 // Phase 5 Types
 
 export type HumanActionType = "approval" | "clarification" | "escalation"
+// Engine approval API vocabulary. UI tabs use HumanActionTab below.
 export const approvalStatuses = ["pending", "approved", "rejected", "expired"] as const
 export type ApprovalStatus = typeof approvalStatuses[number]
 // Approval API status is separate from UI action lifecycle status.
 export type HumanActionStatus = "open" | "claimed" | "resolved" | "expired" | "cancelled"
-export interface HumanActionFilters { status?: ApprovalStatus; type?: HumanActionType }
+export type HumanActionTab = "open" | "claimed" | "resolved" | "all"
+export interface HumanActionFilters { status?: HumanActionTab; type?: HumanActionType }
 export type HumanActionResolution = "approved" | "rejected" | "answered" | "resolved" | "dismissed"
 export type HumanActionPriority = "low" | "normal" | "high" | "critical"
 
@@ -755,17 +757,6 @@ export interface WhatsAppChannel {
   createdAt: string
 }
 
-export interface VoiceChannel {
-  id: string
-  name: string
-  provider: "twilio" | "vonage" | "mock"
-  phoneNumber?: string
-  status: "connected" | "pending" | "degraded" | "disconnected"
-  voice?: string
-  language?: string
-  connectionId?: string
-  createdAt: string
-}
 
 
 
@@ -788,7 +779,7 @@ export interface CostRecord {
   timestamp: string;
   amount: number;
   currency: string;
-  category: "model" | "compute" | "storage" | "integration" | "voice" | "other";
+  category: "model" | "compute" | "storage" | "integration" | "other";
   provider?: string;
   model?: string;
   workflowId?: string;
@@ -1130,7 +1121,7 @@ export interface AuditEvent {
 export interface ProviderDefinition {
   id: string;
   name: string;
-  type: "model" | "compute" | "storage" | "email" | "messaging" | "voice" | "other";
+  type: "model" | "compute" | "storage" | "email" | "messaging" | "other";
   status: "healthy" | "degraded" | "outage" | "maintenance" | "disabled";
   enabled: boolean;
   lastCheckedAt?: string;

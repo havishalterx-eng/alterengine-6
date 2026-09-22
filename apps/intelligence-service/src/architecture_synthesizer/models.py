@@ -2,7 +2,7 @@
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from src.capability_registry.models import CapabilityKind
 from src.capability_resolver.models import NodeRequirements
@@ -19,6 +19,8 @@ ArchitectureTopology = Literal[
 ArchitectureRole = Literal["direct", "manager", "worker", "deterministic", "control"]
 ExecutionKind = Literal["llm", "deterministic", "control"]
 BoundaryKind = Literal["verification", "human_approval"]
+SourceNodeType = Literal["llm", "tool", "branch", "join"]
+SOURCE_NODE_TYPES: frozenset[str] = frozenset({"llm", "tool", "branch", "join"})
 
 
 class StrictModel(BaseModel):
@@ -31,7 +33,14 @@ class SynthesisConstraints(StrictModel):
     coordination_required: bool = False
     verification_required: bool = False
     human_approval_required: bool = False
+    # A person approves every action that may change something outside Alter,
+    # and nothing else: unlike human_approval_required, delivered output is not
+    # held for approval. The workspace "approve external actions" safeguard.
+    external_action_approval_required: bool = False
     customer_visible: bool = False
+    # The run handles personal data: its delivered output is verified before it
+    # leaves, even when no one outside the tenant will see it.
+    contains_pii: bool = False
     allowed_regions: list[NonEmpty] = Field(default_factory=list, max_length=32)
     allowed_data_residency: list[NonEmpty] = Field(default_factory=list, max_length=32)
     allowed_permissions: list[NonEmpty] = Field(default_factory=list, max_length=64)
@@ -55,6 +64,12 @@ class ArchitectureNode(StrictModel):
     source_node_key: NonEmpty
     role: ArchitectureRole
     execution_kind: ExecutionKind
+    # The skeleton node type. execution_kind "control" covers both branch and
+    # join, and the compiler lowers those to different node types (Gate and
+    # Merge), so it needs the original. Optional so an architecture produced
+    # before this field still validates; the compiler rejects a control node
+    # without it rather than guessing.
+    source_node_type: SourceNodeType | None = None
     depends_on: list[NonEmpty]
     capability_role: EligibleCapabilityRole | None = None
     # The skeleton node's own configuration -- a prompt for an llm node, a
@@ -74,9 +89,23 @@ class ExecutionWave(StrictModel):
 
 
 class ArchitectureBoundary(StrictModel):
+    """A verification or approval step at one side of a source node.
+
+    before_node_key gates entry to the node -- the only placement that can stop
+    an external action, since a gate after it runs once the action is done.
+    after_node_key gates the node's output on its way out of the run.
+    """
+
     kind: BoundaryKind
-    after_node_key: NonEmpty
+    after_node_key: NonEmpty | None = None
+    before_node_key: NonEmpty | None = None
     reason: NonEmpty
+
+    @model_validator(mode="after")
+    def _exactly_one_placement(self) -> "ArchitectureBoundary":
+        if (self.after_node_key is None) == (self.before_node_key is None):
+            raise ValueError("a boundary needs exactly one of before_node_key or after_node_key")
+        return self
 
 
 class ArchitectureSpec(StrictModel):
@@ -119,5 +148,7 @@ def validate_request_shape(request: SynthesizeArchitectureRequest) -> None:
             "node requirements must contain exactly every task skeleton node"
         )
     for node in request.task_skeleton.nodes:
+        if node.type not in SOURCE_NODE_TYPES:
+            raise ArchitectureSynthesisError(f"node {node.key!r} has unknown type {node.type!r}")
         if any(dependency not in node_keys for dependency in node.depends_on):
             raise ArchitectureSynthesisError(f"node {node.key!r} depends on unknown source node")

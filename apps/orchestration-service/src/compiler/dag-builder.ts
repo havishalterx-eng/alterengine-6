@@ -118,7 +118,7 @@ function configWithoutUiMetadata(config: Record<string, unknown>): Record<string
 // Conditional edge helpers (Gate / branch nodes)
 // ---------------------------------------------------------------------------
 
-function extractGateConditions(
+export function extractGateConditions(
   gateKey: string,
   config: Record<string, unknown>,
 ): Record<string, string> {
@@ -143,7 +143,7 @@ function extractGateConditions(
   return conditions;
 }
 
-function validateGateConditionCoverage(
+export function validateGateConditionCoverage(
   gateKey: string,
   conditions: Record<string, string>,
   successors: Set<string>,
@@ -308,6 +308,18 @@ export function compileTaskSkeletonToDag(
  * Every ToolCall/SandboxExec requires a preceding result to verify. A source
  * external action therefore has no safe edge and is rejected rather than
  * silently bypassing the verification law.
+ *
+ * One verification gate per incoming edge, chained, with the last gate's
+ * conditional edge the only condition on the action. The Executor unlocks a
+ * node when ANY conditional predecessor allows it, so gates side by side would
+ * let one verified input release an action another input failed, and a branch
+ * that routed away would be overruled by a passing gate.
+ *
+ * A branch feeding the action decides whether the chain runs at all: its
+ * condition for the action is copied onto the first gate, under that gate's
+ * key. GateHandler reports activeSuccessors by condition key, so a branch
+ * condition left keyed by the action would never name the gate that now sits
+ * in between, and the action could never run.
  */
 function injectVerificationGates(
   nodes: CompiledDag["nodes"],
@@ -324,37 +336,55 @@ function injectVerificationGates(
         `External action "${action.key}" cannot be a${entryHint} source node: no upstream output exists to verify`,
       );
     }
+    const gateKeys = incoming.map(() => `verify_step_${gateIndex++}`);
+    const replacement: CompiledDag["edges"] = [];
     for (const edge of incoming) {
-      const gateKey = `verify_step_${gateIndex}`;
-      gateIndex += 1;
+      if (edge.kind === "conditional") {
+        // A branch routing to the action now routes to the head of its chain.
+        const branch = nodes.find((node) => node.key === edge.from)!;
+        const conditions = branch.config["conditions"] as Record<string, string>;
+        branch.config = { ...branch.config, conditions: { ...conditions, [gateKeys[0]!]: conditions[action.key]! } };
+        replacement.push({ ...edge, key: `${edge.from}-to-${gateKeys[0]}`, to: gateKeys[0]! });
+      } else {
+        replacement.push({ key: `${edge.from}-to-${gateKeys[0]}`, from: edge.from, to: gateKeys[0]!, kind: "sequential" });
+      }
+    }
+    incoming.forEach((edge, index) => {
+      const gateKey = gateKeys[index]!;
+      const protectedKey = gateKeys[index + 1] ?? action.key;
       nodes.push({
         key: gateKey,
         type: "Gate",
         config: {
           verification: {
             source_node_key: edge.from,
-            protected_node_key: action.key,
+            protected_node_key: protectedKey,
             policy: "provisional-quality-pass-and-noncritical-safety",
           },
         },
         metadata: { ui: {} },
       });
-      const edgeIndex = edges.indexOf(edge);
-      edges.splice(edgeIndex, 1,
-        { ...edge, key: `${edge.from}-to-${gateKey}`, to: gateKey },
-        {
-          key: `${gateKey}-to-${action.key}`,
-          from: gateKey,
-          to: action.key,
-          kind: "conditional",
-          condition: { expression: "true", language: "cel" },
-        },
-      );
-    }
+      replacement.push({
+        key: `${gateKey}-to-${protectedKey}`,
+        from: gateKey,
+        to: protectedKey,
+        kind: "conditional",
+        condition: { expression: "true", language: "cel" },
+      });
+    });
+    // Plain inputs also stay wired into the action, as the architecture
+    // compiler does, so its handler still receives their outputs (a ToolCall
+    // argument can reference them). Being sequential, they never unlock it:
+    // the Executor gates a node only on its conditional predecessors.
+    replacement.push(...incoming.filter((edge) => edge.kind !== "conditional"));
+    // Replace the action's incoming edges in place, keeping edge order stable.
+    const first = edges.indexOf(incoming[0]!);
+    for (const edge of incoming.slice(1)) edges.splice(edges.indexOf(edge), 1);
+    edges.splice(first, 1, ...replacement);
   }
 }
 
-function computeWaves(
+export function computeWaves(
   nodes: CompiledDag["nodes"],
   edges: CompiledDag["edges"],
 ): CompiledDag["waves"] {

@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useNavigate } from "react-router-dom"
-import { approvalStatuses, type ApprovalStatus } from "@/api/types"
+import type { HumanActionTab } from "@/api/types"
 import { api } from "@/api/client"
 import { queryKeys } from "@/api/query-keys"
 import { PageHeader } from "@/components/common/page-header"
@@ -42,7 +42,7 @@ function ActionPriorityBadge({ priority }: { priority: string }) {
 
 export function HumanActionsList() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = React.useState<ApprovalStatus | "all">("pending")
+  const [activeTab, setActiveTab] = React.useState<HumanActionTab>("open")
   const [activeType, setActiveType] = React.useState<string>("all")
 
   const { data: actions, isLoading, isError, refetch } = useQuery({
@@ -81,12 +81,11 @@ export function HumanActionsList() {
       </div>
 
       <div className="flex-1 overflow-auto p-8 pt-0">
-        <Tabs value={activeTab} onValueChange={(value) => { if (value === "all" || approvalStatuses.some(status => status === value)) setActiveTab(value as ApprovalStatus | "all") }} className="mb-6">
+        <Tabs value={activeTab} onValueChange={(value) => { if (["open", "claimed", "resolved", "all"].includes(value)) setActiveTab(value as HumanActionTab) }} className="mb-6">
           <TabsList>
-            <TabsTrigger value="pending">Pending</TabsTrigger>
-            <TabsTrigger value="approved">Approved</TabsTrigger>
-            <TabsTrigger value="rejected">Rejected</TabsTrigger>
-            <TabsTrigger value="expired">Expired</TabsTrigger>
+            <TabsTrigger value="open">Open</TabsTrigger>
+            <TabsTrigger value="claimed">Claimed</TabsTrigger>
+            <TabsTrigger value="resolved">Resolved</TabsTrigger>
             <TabsTrigger value="all">All</TabsTrigger>
           </TabsList>
         </Tabs>

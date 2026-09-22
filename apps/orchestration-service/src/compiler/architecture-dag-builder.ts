@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { CompiledDagSchema, type CompiledDag, type NodeType } from "@alterx/contracts";
 
-import { CompilerValidationError } from "./dag-builder";
+import { CompilerValidationError, computeWaves, extractGateConditions, validateGateConditionCoverage } from "./dag-builder";
 
 const NodeKey = z.string().regex(/^[a-z][a-z0-9._-]{0,127}$/i);
 const CapabilityKind = z.enum(["agent", "model", "tool", "connector", "execution"]);
@@ -10,6 +10,9 @@ const ArchitectureNode = z.object({
   source_node_key: NodeKey,
   role: z.enum(["direct", "manager", "worker", "deterministic", "control"]),
   execution_kind: z.enum(["llm", "deterministic", "control"]),
+  // The skeleton node type synthesis started from. execution_kind "control"
+  // covers both branch and join, which lower to different node types.
+  source_node_type: z.enum(["llm", "tool", "branch", "join"]).optional(),
   depends_on: z.array(NodeKey),
   capability_role: z.object({
     source_node_key: NodeKey,
@@ -31,7 +34,12 @@ const ArchitectureSpec = z.object({
   execution_waves: z.array(z.object({
     order: z.number().int().nonnegative(), node_keys: z.array(NodeKey).min(1), depends_on_wave_orders: z.array(z.number().int().nonnegative()),
   }).strict()).min(1),
-  boundaries: z.array(z.object({ kind: z.enum(["verification", "human_approval"]), after_node_key: NodeKey, reason: z.string().min(1) }).strict()),
+  // Exactly one placement. before_node_key gates entry to a node -- the only
+  // placement that can stop an external action; after_node_key gates a node's
+  // output on its way out of the run.
+  boundaries: z.array(z.object({
+    kind: z.enum(["verification", "human_approval"]), after_node_key: NodeKey.nullable().optional(), before_node_key: NodeKey.nullable().optional(), reason: z.string().min(1),
+  }).strict().refine((boundary) => (boundary.after_node_key == null) !== (boundary.before_node_key == null), { message: "a boundary needs exactly one of before_node_key or after_node_key" })),
   success_criteria: z.array(z.string().trim().min(1)).min(1).nullable().optional(),
 }).passthrough();
 const BindingDecision = z.object({
@@ -53,9 +61,19 @@ export const ArchitectureCompileInputSchema = z.object({
 export type ArchitectureCompileInput = z.infer<typeof ArchitectureCompileInputSchema>;
 
 function nodeType(node: z.infer<typeof ArchitectureNode>, binding: z.infer<typeof BindingDecision>["bindings"][number] | undefined): NodeType {
-  if (node.execution_kind === "control") return "Gate";
+  if (node.execution_kind === "control") {
+    // Both lowered to Gate before source_node_type existed. A join became a Gate
+    // with no conditions, which GateHandler rejects, so every fan-in failed.
+    if (node.source_node_type === "join") return "Merge";
+    if (node.source_node_type === "branch") return "Gate";
+    throw new CompilerValidationError(`control node "${node.source_node_key}" has no source_node_type: a branch and a join cannot be told apart`);
+  }
   if (binding?.kind === "execution") return "SandboxExec";
   if (binding?.kind === "tool" || binding?.kind === "connector") return "ToolCall";
+  // A deterministic node is an external action whether or not binding pinned a
+  // record for it -- the resolver declares no capability for tool nodes, so it
+  // usually has none. Lowering it to LLMTask sent its tool call to a model.
+  if (node.execution_kind === "deterministic") return "ToolCall";
   return "LLMTask";
 }
 
@@ -106,22 +124,120 @@ export function compileArchitectureToDag(raw: ArchitectureCompileInput): Compile
       metadata: { ui: {} },
     };
   });
-  const edges: CompiledDag["edges"] = architecture.nodes.flatMap((node) => node.depends_on.map((from) => ({ key: `${from}-to-${node.source_node_key}`, from, to: node.source_node_key, kind: "sequential" as const })));
+  // Branches route with CEL conditions keyed by successor, exactly as the
+  // skeleton compiler lowers them; the compiled Gate carries that map so
+  // GateHandler can evaluate it, and each successor edge is conditional.
+  const branchConditions = new Map<string, Record<string, string>>();
+  for (const node of architecture.nodes) {
+    if (node.source_node_type !== "branch") continue;
+    const key = node.source_node_key;
+    const conditions = extractGateConditions(key, node.config ?? {});
+    const successors = new Set(architecture.nodes.filter((candidate) => candidate.depends_on.includes(key)).map((candidate) => candidate.source_node_key));
+    validateGateConditionCoverage(key, conditions, successors);
+    branchConditions.set(key, conditions);
+    const compiled = nodes.find((candidate) => candidate.key === key)!;
+    compiled.config = { ...compiled.config, conditions };
+  }
+  const edges: CompiledDag["edges"] = architecture.nodes.flatMap((node) => node.depends_on.map((from): CompiledDag["edges"][number] => {
+    const edgeKey = `${from}-to-${node.source_node_key}`;
+    const conditions = branchConditions.get(from);
+    if (conditions !== undefined) return { key: edgeKey, from, to: node.source_node_key, kind: "conditional", condition: { expression: conditions[node.source_node_key]!, language: "cel" } };
+    return { key: edgeKey, from, to: node.source_node_key, kind: node.source_node_type === "join" ? "merge" : "sequential" };
+  }));
+  const addNode = (key: string, type: NodeType, config: Record<string, unknown>): void => {
+    if (byKey.has(key) || nodes.some((node) => node.key === key)) throw new CompilerValidationError(`boundary node collides with an existing node: ${key}`);
+    nodes.push({ key, type, config, metadata: { ui: {} } });
+  };
+  const pass = { expression: "true", language: "cel" as const };
+
   for (const boundary of architecture.boundaries) {
-    if (!byKey.has(boundary.after_node_key)) throw new CompilerValidationError(`boundary references unknown source node: ${boundary.after_node_key}`);
-    const key = `${boundary.kind}_${boundary.after_node_key}`;
-    if (byKey.has(key)) throw new CompilerValidationError(`boundary node collides with source node: ${key}`);
-    nodes.push({ key, type: boundary.kind === "human_approval" ? "HumanApproval" : "Gate", config: { boundary: boundary.kind, reason: boundary.reason }, metadata: { ui: {} } });
-    edges.push({ key: `${boundary.after_node_key}-to-${key}`, from: boundary.after_node_key, to: key, kind: "sequential" });
+    const target = boundary.before_node_key ?? boundary.after_node_key;
+    if (target == null || !byKey.has(target)) throw new CompilerValidationError(`boundary references unknown source node: ${target}`);
   }
-  const waves = architecture.execution_waves.slice().sort((a, b) => a.order - b.order).map((wave) => ({ key: `wave_${wave.order}`, order: wave.order, node_keys: [...wave.node_keys].sort(), depends_on: [...wave.depends_on_wave_orders].sort((a, b) => a - b).map((order) => `wave_${order}`) }));
-  const boundaryWaves: CompiledDag["waves"] = [];
-  for (const [index, boundary] of architecture.boundaries.entries()) {
-    const sourceWave = waves.find((wave) => wave.node_keys.includes(boundary.after_node_key));
-    if (sourceWave === undefined) throw new CompilerValidationError(`source node missing from architecture waves: ${boundary.after_node_key}`);
-    boundaryWaves.push({ key: `boundary_wave_${index}`, order: (waves.at(-1)?.order ?? 0) + index + 1, node_keys: [`${boundary.kind}_${boundary.after_node_key}`], depends_on: [sourceWave.key] });
+
+  // Before a node: inputs -> [approval] -> verification gate chain -> node.
+  // The node keeps its original input edges so its handler still receives
+  // upstream outputs; the conditional edge from the last gate is what the
+  // Executor checks before running it. One gate per input, chained, so every
+  // input must pass: the Executor unlocks a node when ANY conditional
+  // predecessor allows it, so parallel gates would let one passing input
+  // release an action another input failed.
+  for (const node of architecture.nodes) {
+    const key = node.source_node_key;
+    const before = architecture.boundaries.filter((boundary) => boundary.before_node_key === key);
+    if (before.length === 0) continue;
+    const approval = before.find((boundary) => boundary.kind === "human_approval");
+    const verification = before.find((boundary) => boundary.kind === "verification");
+    // A branch that routes to this node must decide whether the inserted steps
+    // run at all. Its condition moves onto each step fed directly by the node's
+    // inputs, and its edge into the node itself becomes plain input. Left as a
+    // conditional edge into the node, the Executor's OR over conditional
+    // predecessors would let a passing verification gate run a node the
+    // branch routed away from.
+    const routingBranches = node.depends_on.filter((from) => branchConditions.has(from));
+    const plainInputs = node.depends_on.filter((from) => !branchConditions.has(from));
+    const guard = (to: string): void => {
+      for (const branch of routingBranches) {
+        const conditions = branchConditions.get(branch)!;
+        conditions[to] = conditions[key]!;
+        edges.push({ key: `${branch}-to-${to}`, from: branch, to, kind: "conditional", condition: { expression: conditions[key]!, language: "cel" } });
+      }
+    };
+    for (const branch of routingBranches) {
+      const index = edges.findIndex((candidate) => candidate.from === branch && candidate.to === key);
+      edges[index] = { key: edges[index]!.key, from: branch, to: key, kind: "sequential" };
+    }
+    let previous: string[] = plainInputs;
+    if (approval !== undefined) {
+      const approvalKey = `human_approval_before_${key}`;
+      addNode(approvalKey, "HumanApproval", { requested_action: { kind: "run_node", node_key: key, reason: approval.reason } });
+      previous.forEach((from) => edges.push({ key: `${from}-to-${approvalKey}`, from, to: approvalKey, kind: "sequential" }));
+      guard(approvalKey);
+      edges.push({ key: `${approvalKey}-to-${key}`, from: approvalKey, to: key, kind: "sequential" });
+      previous = [approvalKey];
+    }
+    if (verification !== undefined) {
+      if (node.depends_on.length === 0) {
+        throw new CompilerValidationError(`External action "${key}" cannot be a source node: no upstream output exists to verify`);
+      }
+      const gateKeys = node.depends_on.map((_source, index) => `verification_before_${key}_${index}`);
+      node.depends_on.forEach((source, index) => {
+        const gateKey = gateKeys[index]!;
+        const protectedKey = gateKeys[index + 1] ?? key;
+        addNode(gateKey, "Gate", { verification: { source_node_key: source, protected_node_key: protectedKey, policy: "provisional-quality-pass-and-noncritical-safety" }, boundary: "verification", reason: verification.reason });
+        if (index === 0) {
+          previous.forEach((from) => edges.push({ key: `${from}-to-${gateKey}`, from, to: gateKey, kind: "sequential" }));
+          guard(gateKey);
+        }
+        edges.push({ key: `${gateKey}-to-${protectedKey}`, from: gateKey, to: protectedKey, kind: "conditional", condition: pass });
+      });
+    }
   }
-  const entry = architecture.nodes.filter((node) => node.depends_on.length === 0).map((node) => node.source_node_key).sort();
+  // After a node: node -> [verification gate] -> [approval], for output the run delivers.
+  for (const node of architecture.nodes) {
+    const key = node.source_node_key;
+    const after = architecture.boundaries.filter((boundary) => boundary.after_node_key === key);
+    const verification = after.find((boundary) => boundary.kind === "verification");
+    const approval = after.find((boundary) => boundary.kind === "human_approval");
+    const gateKey = `verification_${key}`;
+    const approvalKey = `human_approval_${key}`;
+    if (verification !== undefined) {
+      addNode(gateKey, "Gate", { verification: { source_node_key: key, protected_node_key: approval === undefined ? key : approvalKey, policy: "provisional-quality-pass-and-noncritical-safety" }, boundary: "verification", reason: verification.reason });
+      edges.push({ key: `${key}-to-${gateKey}`, from: key, to: gateKey, kind: "sequential" });
+    }
+    if (approval !== undefined) {
+      addNode(approvalKey, "HumanApproval", { requested_action: { kind: "deliver_output", node_key: key, reason: approval.reason } });
+      edges.push(verification === undefined
+        ? { key: `${key}-to-${approvalKey}`, from: key, to: approvalKey, kind: "sequential" }
+        : { key: `${gateKey}-to-${approvalKey}`, from: gateKey, to: approvalKey, kind: "conditional", condition: pass });
+    }
+  }
+
+  // Waves come from the lowered graph, not the architecture's source waves:
+  // gates inserted before a node must run in a wave between its inputs and it.
+  const waves = computeWaves(nodes, edges);
+  const incoming = new Set(edges.map((edge) => edge.to));
+  const entry = nodes.filter((node) => !incoming.has(node.key)).map((node) => node.key).sort();
   const result = CompiledDagSchema.safeParse({
     schema_version: input.data.dag_schema_version,
     entry_node_keys: entry,
@@ -130,7 +246,7 @@ export function compileArchitectureToDag(raw: ArchitectureCompileInput): Compile
       : { success_criteria: architecture.success_criteria }),
     nodes,
     edges,
-    waves: [...waves, ...boundaryWaves],
+    waves,
   });
   if (!result.success) throw new CompilerValidationError(`invalid architecture DAG: ${result.error.message}`);
   return result.data;
