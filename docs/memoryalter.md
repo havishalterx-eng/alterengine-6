@@ -460,6 +460,55 @@ ancestry with `git merge -s ours x4/main`. If alter-x-4- merges anything while t
 that command would record as imported a pull request this repository never received, and the next
 import would silently skip it. **Pinned to `092f148` (#193) instead.**
 
+### 2026-09-22 — the import landed; Phase 4.1 does NOT close here, and why
+
+**PR #16 merged.** All 22 of alter-x-4-'s pull requests #172-#193, with our C29 work re-applied on
+top, git ancestry recorded at `092f148`, CI green on the merged head. **This was the last import:
+alterengine-6 is now the only repository** (decision of 2026-09-22).
+
+**Phase 4.1 is imported but NOT reproduced here, and the board must say so.** Their planner set
+scores 35/36 on their machine. On ours: Qwen, our task 1.5 binding, gives **27/36 then 26/36** --
+the model answers, it simply scores worse on this set. Nova Lite, their 35/36 model, gives
+**17/36 with all 28 workflow calls taking the keyword fallback.**
+
+**17/36 is exactly the pre-rewrite keyword-heuristic score their #173 measured**, which is the
+tell. Root cause, confirmed against the live API rather than guessed: **every Nova model in
+`ap-south-1` reports `INFERENCE_PROFILE` and cannot be invoked by a bare model id.** This
+repository recorded that on 2026-09-09 -- *"Nova needs an inference profile, not a model ID"* --
+and nobody connected it when the alias was bound. The Planner's fallback did its job and hid the
+failure behind a plausible number.
+
+**What this does and does not mean.** The imported code is correct: CI green, the fallback is the
+designed behaviour, the architecture set is 24/24 twice. What is not true here is Phase 4.1's done
+gate of 0.90 -- we measure 0.75 on Qwen and 0.47 on a Nova binding that never reaches a model.
+**4.1 stays open until a working binding scores above the floor on our own hardware.** Standing
+rule 3 applies exactly as written: somebody else's demonstration is not our evidence.
+
+**The "did C29 cost anything" question is answered by elimination rather than by a number.**
+Criteria assignment does not touch strategy payloads; the Nova result is a configuration failure
+with a named cause; the architecture set is unchanged. **The CEO session overrode its own
+pre-registered bar** of 34/36 in order to merge, because that bar existed to detect our work
+degrading their Planner and the cause is proven to lie elsewhere. Recorded rather than quietly
+waived.
+
+**Three more findings from the same report.**
+
+1. **Replan is real now.** The imported client returns a revised skeleton and *rejects an identical
+   one* -- `ValueError: revised skeleton is identical to the skeleton that failed`. Replan guards
+   9/9, healing loop 2/2. **This corrects Phase 2's record:** 2.4a proved the plan reached the
+   Planner, and until #174 the Planner then changed nothing.
+2. **Design log 16's four approval modes do not exist in code.** Not always-block, not
+   auto-approve, not skip-on-timeout, not approve-once-then-promote. What exists is a gate placed
+   before qualifying external side effects. Placement without modes. Opened as **C30**.
+3. **A stale `packages/adapters/dist` produced a 500 that looked like a code defect** during the
+   import. Tests import built output, not source, so a commit-by-commit import must rebuild every
+   package it touches before testing. CI never sees this because it builds fresh.
+
+**Product rules adopted from alter-x-4-, for Track D to judge rather than inherit.** From #175:
+verification before external actions and before PII-carrying output (sections 5 and 11); residency
+restricts capability eligibility (section 2). From #186: PII and external-action safeguards default
+on, and a workflow may add safeguards but never remove one (sections 16 and 5).
+
 ---
 
 ## 3. Checklist context
