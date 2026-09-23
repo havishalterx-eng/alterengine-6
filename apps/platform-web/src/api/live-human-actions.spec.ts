@@ -9,7 +9,7 @@ vi.mock("./http", () => ({
 }))
 
 import { apiGet } from "./http"
-import { getHumanActions } from "./live"
+import { getHumanAction, getHumanActions } from "./live"
 import type { HumanActionFilters } from "./types"
 
 // One page per source lifecycle, shaped as /api/v1/action-centre returns it.
@@ -42,6 +42,21 @@ beforeEach(() => {
 async function ids(filters?: HumanActionFilters) {
   return (await getHumanActions(filters)).map((action) => action.id)
 }
+
+describe("One human action", () => {
+  it("is read by its own id, not by loading the queue and searching it", async () => {
+    const item = { source_type: "escalation", item: { id: "esc_1", status: "claimed" } }
+    vi.mocked(apiGet).mockReset()
+    vi.mocked(apiGet).mockResolvedValue(item)
+
+    const action = await getHumanAction("esc_1")
+
+    expect(action).toMatchObject({ id: "esc_1", type: "escalation", status: "claimed" })
+    expect(vi.mocked(apiGet).mock.calls.map(([path]) => path)).toEqual([
+      "/api/v1/action-centre/esc_1",
+    ])
+  })
+})
 
 describe("Human Actions tabs over approvals, escalations and clarifications", () => {
   it("never sends the tab to the action centre, whose status filter is approvals-only", async () => {
