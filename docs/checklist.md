@@ -792,6 +792,44 @@ workflow before Recovery is invoked.
 
 ---
 
+## Open now — the short list, 2026-09-24
+
+Everything below is also a numbered item elsewhere in this file. This block exists because after
+the #172–#193 import the board has 33 open items and the five that actually gate progress are hard
+to find among them.
+
+**Blocking a phase**
+- [ ] **C31 — bind the model aliases to invocable ids, then re-measure 4.1.** Smallest item here
+      and it unblocks a whole phase. Nova in `ap-south-1` is inference-profile only; a bare id
+      fails every call and the keyword fallback hides it as a mediocre score rather than an outage.
+- [ ] **4.1** stays open until that re-measure clears 0.90 **on our hardware**.
+
+**A design-log mismatch we now run**
+- [ ] **C30 — §16's four approval modes do not exist in code.** Always-block, auto-approve,
+      skip-on-timeout, approve-once-then-promote: none of them. What exists is gate placement
+      before side-effecting tools. Decide: build §16, or amend it in Track D.
+
+**Bookkeeping, roughly an hour, and it makes the board honest**
+- [ ] **4.2** — proven here at 24/24 twice; still shows open.
+- [ ] **4.3** — both golden sets written before the rewrites; provable by inspection.
+- [ ] **5.1 voice** — decided cut 2026-09-08, executed by their #183; the tree is already clean.
+- [ ] **6.3 approval route** — proven by their #188 and re-proven here at 3/3.
+
+**Not on the board because it is not ours to do**
+- [ ] **Tell Surya and Satwik that building moves to alterengine-6.** The import was justified as
+      the last one, and the git-history repair only pays off once. Until they are told, the two
+      trees drift again from their next commit. **Havish's action, not the CEO session's.**
+
+**Still true and easy to forget**
+- [ ] **C29** — nothing validates model output against the task's contract; slice 2b is unblocked
+      and now sits on their better Planner, which is why it was paused.
+- [ ] **C8** — the idempotency gate §4 makes mandatory. Newly buildable: their import labels which
+      tools have side effects, which is the prerequisite that was missing.
+- [ ] **Track D** has grown. It must now also judge the product rules adopted from `alter-x-4-`
+      rather than inherit them.
+
+---
+
 ## Standing rules
 
 1. **Do not touch the 25 Category 1 components.** No logic change, no code change. Anything
