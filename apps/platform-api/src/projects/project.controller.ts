@@ -6,6 +6,7 @@ import {
   HttpCode,
   Param,
   Post,
+  Query,
   Res,
   UseFilters,
 } from "@nestjs/common";
@@ -25,9 +26,10 @@ import type {
   ProjectActionResult,
   ProjectBuild,
   ProjectClarificationList,
+  ProjectList,
   ProjectPlan,
+  ProjectRecord,
   ProjectResource,
-  ProjectSummary,
   RejectPlanInput,
   RequestPlanChangesInput,
 } from "./types";
@@ -78,24 +80,42 @@ export class ProjectController {
   @RequireWorkspaceRole(...readRoles)
   @RequirePermission("projects:read")
   async list(
+    @Query("cursor") cursor: string | undefined,
+    @Query("limit") limit: string | undefined,
     @ActorContext() actor: ActorContextType | undefined,
     @Headers("traceparent") traceparent: string | undefined,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<{ projects: ProjectSummary[] }> {
-    return project(await this.projects.list(requireActor(actor, "/api/v1/projects"), traceparent), reply);
+  ): Promise<ProjectList> {
+    const instance = "/api/v1/projects";
+    return project(
+      await this.projects.list(
+        cursor,
+        limit,
+        requireActor(actor, instance),
+        traceparent,
+      ),
+      reply,
+    );
   }
 
   @Get(":projectId")
   @RequireWorkspaceRole(...readRoles)
   @RequirePermission("projects:read")
-  async detail(
+  async get(
     @Param("projectId") projectId: string,
     @ActorContext() actor: ActorContextType | undefined,
     @Headers("traceparent") traceparent: string | undefined,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<ProjectSummary> {
-    return project(await this.projects.detail(projectId,
-      requireActor(actor, `/api/v1/projects/${projectId}`), traceparent), reply);
+  ): Promise<ProjectRecord> {
+    const instance = `/api/v1/projects/${projectId}`;
+    return project(
+      await this.projects.get(
+        projectId,
+        requireActor(actor, instance),
+        traceparent,
+      ),
+      reply,
+    );
   }
 
   @Get(":projectId/clarifications")

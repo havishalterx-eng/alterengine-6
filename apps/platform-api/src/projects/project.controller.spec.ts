@@ -45,6 +45,17 @@ const projectId = "prj_018f47a5-7b2c-7d10-8f11-123456789abc";
 const clarificationId = "clr_018f47a5-7b2c-7d10-8f11-123456789abc";
 const tenantId = "ten_018f47a5-7b2c-7d10-8f11-123456789abc";
 const workspaceId = "ws_018f47a5-7b2c-7d10-8f11-123456789abc";
+// What the engine's project read routes answer with, which is the
+// `projects` row, not the planning resource the create route returns.
+const projectRecord = {
+  id: projectId,
+  tenantId,
+  workspaceId,
+  name: "Inventory control",
+  status: "draft",
+  createdAt: "2026-09-01T00:00:00.000Z",
+  updatedAt: "2026-09-02T00:00:00.000Z",
+};
 const editor: ActorContextType = {
   user_id: "usr_018f47a5-7b2c-7d10-8f11-123456789abc",
   tenant_id: tenantId,
@@ -123,6 +134,72 @@ describe("ProjectController routes", () => {
 
   afterAll(async () => {
     await app.close();
+  });
+
+  it("lists the caller's projects, passing the page through as the engine sent it", async () => {
+    const response = await request("GET", "/api/v1/projects", { actor: viewer });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      data: [projectRecord],
+      page: { next_cursor: null, has_more: false, limit: 50 },
+    });
+    expect(engine.get).toHaveBeenCalledWith(
+      "/api/v1/projects",
+      expect.anything(),
+    );
+  });
+
+  it("forwards cursor and limit to the engine", async () => {
+    const response = await request(
+      "GET",
+      `/api/v1/projects?cursor=${projectId}&limit=25`,
+      { actor: viewer },
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(engine.get).toHaveBeenCalledWith(
+      `/api/v1/projects?cursor=${projectId}&limit=25`,
+      expect.anything(),
+    );
+  });
+
+  it.each([
+    ["cursor=not-a-project-id", "cursor"],
+    ["limit=0", "limit"],
+    ["limit=201", "limit"],
+  ])("rejects ?%s before calling the engine", async (query, field) => {
+    const response = await request("GET", `/api/v1/projects?${query}`, {
+      actor: viewer,
+    });
+
+    expectProblem(response, 400, "PROJECT_VALIDATION_FAILED");
+    expect(response.json()).toMatchObject({
+      field_errors: [{ field }],
+    });
+    expect(engine.get).not.toHaveBeenCalled();
+  });
+
+  it("reads one project by its own id", async () => {
+    const response = await request("GET", `/api/v1/projects/${projectId}`, {
+      actor: viewer,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(projectRecord);
+    expect(engine.get).toHaveBeenCalledWith(
+      `/api/v1/projects/${projectId}`,
+      expect.anything(),
+    );
+  });
+
+  it("rejects a project id that is not one, before calling the engine", async () => {
+    const response = await request("GET", "/api/v1/projects/wf_not-a-project", {
+      actor: viewer,
+    });
+
+    expectProblem(response, 400, "PROJECT_VALIDATION_FAILED");
+    expect(engine.get).not.toHaveBeenCalled();
   });
 
   it("submits brief and replays without duplicate Engine execution", async () => {
@@ -349,36 +426,6 @@ describe("ProjectController routes", () => {
     },
   );
 
-  it.each(["/api/v1/projects", `/api/v1/projects/${projectId}`])("Revive B4 GET %s relays project reads", async (path) => {
-    const detail = { id: projectId, tenantId, workspaceId, name: "Project", status: "draft", createdAt: "2026-09-16T00:00:00Z", updatedAt: "2026-09-16T00:00:00Z" };
-    const body = path === "/api/v1/projects" ? { projects: [detail] } : detail;
-    engine.get.mockResolvedValueOnce({ status: 200, body, requestId: "req_engine" });
-    const response = await request("GET", path, { actor: viewer });
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual(body);
-    expect(response.headers["request_id"]).toBe("req_engine");
-    expect(engine.get).toHaveBeenCalledExactlyOnceWith(path, expect.objectContaining({ tenantId, workspaceId }));
-  });
-
-  it.each(["/api/v1/projects", `/api/v1/projects/${projectId}`])("Revive B4 GET %s enforces scope and upstream failures", async (path) => {
-    const denied = await request("GET", path, { actor: { ...viewer, permissions: [] } });
-    expectProblem(denied, 403, "RBAC_PERMISSION_DENIED");
-    expect(engine.get).not.toHaveBeenCalled();
-    engine.failNext("GET", path);
-    const failure = await request("GET", path, { actor: viewer });
-    expectProblem(failure, 409, "ENGINE_PROJECT_CONFLICT");
-  });
-
-  it("Revive B4 detail hides another workspace", async () => {
-    engine.get.mockResolvedValueOnce({ status: 200, body: { id: projectId, workspaceId: "ws_other" } });
-    expectProblem(await request("GET", `/api/v1/projects/${projectId}`, { actor: viewer }), 404, "PROJECT_NOT_FOUND");
-  });
-
-  it("Revive B4 detail validates project ID", async () => {
-    expectProblem(await request("GET", "/api/v1/projects/invalid", { actor: viewer }), 400, "PROJECT_VALIDATION_FAILED");
-    expect(engine.get).not.toHaveBeenCalled();
-  });
-
   it("enforces project read versus write and act roles", async () => {
     expect(
       (
@@ -543,6 +590,18 @@ class StatefulProjectEngine {
             : [],
         },
       };
+    }
+    if (path === "/api/v1/projects" || path.startsWith("/api/v1/projects?")) {
+      return {
+        status: 200,
+        body: {
+          data: [projectRecord],
+          page: { next_cursor: null, has_more: false, limit: 50 },
+        },
+      };
+    }
+    if (path === `/api/v1/projects/${projectId}`) {
+      return { status: 200, body: projectRecord };
     }
     return {
       status: 200,
