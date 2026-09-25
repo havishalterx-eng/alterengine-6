@@ -19,6 +19,9 @@ import { ProjectService } from "../../../apps/platform-api/src/projects/project.
 import { EngineClient, EngineExceptionFilter } from "../../../apps/platform-api/src/engine";
 import { engineConfigFromEnvironment } from "../../../apps/platform-api/src/engine/config";
 import { RbacModule, type ActorContextType, type RbacRequest } from "../../../apps/platform-api/src/rbac";
+import { resourceWorkspaceResolverToken } from "../../../apps/platform-api/src/rbac/rbac.module";
+import { ParamWorkspaceResolver, defaultWorkspaceResolutionRules } from "../../../apps/platform-api/src/rbac/param-workspace.resolver";
+import type { PlatformDb } from "../../../apps/platform-api/src/signup/platform-db";
 import { PgIdempotencyStore } from "../../../apps/platform-api/src/idempotency";
 import { ETAG_RESOURCE_RESOLVER } from "../../../apps/platform-api/src/concurrency";
 import { TriggerEtagResolver } from "../../../apps/platform-api/src/triggers/trigger-etag.resolver";
@@ -29,7 +32,9 @@ const workspace = "018f47a5-7b2c-7d10-8f11-123456789abe";
 const otherWorkspace = "018f47a5-7b2c-7d10-8f11-123456789abf";
 const projectId = `prj_${tenant}`;
 const actor: ActorContextType = { tenant_id: `ten_${tenant}`, workspace_id: `ws_${workspace}`,
-  user_id: `usr_${tenant}`, session_id: "test-session", roles: ["admin"], permissions: ["workflows:write", "projects:read"] };
+  user_id: `usr_${tenant}`, session_id: "test-session", roles: ["admin"],
+  permissions: ["workflows:read", "workflows:write", "workflows:deploy", "projects:read"],
+  workspaceRoles: [{ workspaceId: workspace, role: "admin" }] };
 let container: StartedPostgreSqlContainer;
 let store: PostgresOrchestrationStoreProvider;
 let engineApp: NestFastifyApplication;
@@ -81,7 +86,12 @@ beforeAll(async () => {
     TriggerEtagResolver, { provide: ETAG_RESOURCE_RESOLVER, useExisting: TriggerEtagResolver },
     { provide: PgIdempotencyStore, useValue: { execute: async (_input: unknown, operation: () => Promise<object>) => ({ ...await operation(), replayed: false }) } },
     { provide: APP_FILTER, useClass: EngineExceptionFilter },
-  ] }).compile();
+  ] })
+    // Production's EnforcingRbacModule resolution: a :projectId route is bound to the
+    // workspace the engine says owns the project, and the actor needs a role THERE.
+    .overrideProvider(resourceWorkspaceResolverToken)
+    .useValue(new ParamWorkspaceResolver(defaultWorkspaceResolutionRules({ engineClient: engine, db: {} as PlatformDb })))
+    .compile();
   platformApp = platform.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
   platformApp.getHttpAdapter().getInstance().addHook("preHandler", async request => { (request as RbacRequest).actorContext = actor; });
   await platformApp.listen(0, "127.0.0.1");
@@ -116,12 +126,11 @@ it("B5 absent upstream route fails without persisting another event", async () =
   expect(rows.rows).toEqual(before.rows);
 });
 
-it("B5 unavailable removal never claims deletion or alters the row", async () => {
-  const count = browserRequests.length;
-  await expect(api.removeTrigger(triggerId)).rejects.toThrow("Trigger removal is not available");
-  expect(browserRequests).toHaveLength(count);
-  const rows = await store.withTenant(tenant, tx => tx.query("SELECT id FROM triggers WHERE id = $1", [triggerId]));
-  expect(rows.rows).toEqual([{ id: triggerId }]);
+it("B5 removal archives the trigger through the status route and keeps the row", async () => {
+  await api.removeTrigger(triggerId);
+  expect(engineRequests).toContain(`/api/v1/triggers/${triggerId}/status`);
+  const rows = await store.withTenant(tenant, tx => tx.query("SELECT id, status FROM triggers WHERE id = $1", [triggerId]));
+  expect(rows.rows).toEqual([{ id: triggerId, status: "archived" }]);
 });
 
 it("B4 project list reaches SQL and excludes other tenants and workspaces", async () => {
@@ -137,6 +146,7 @@ it("B4 project detail reaches the stored project", async () => {
 });
 
 it("B4 project detail refuses another workspace or tenant", async () => {
-  await expect(api.getProject(`prj_${workspace}`)).rejects.toThrow("Project not found in this workspace");
+  // Same tenant, a workspace the actor holds no role in: the guard refuses before the read.
+  await expect(api.getProject(`prj_${workspace}`)).rejects.toThrow("Access denied");
   await expect(api.getProject(`prj_${otherTenant}`)).rejects.toThrow();
 });
