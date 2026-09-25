@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Body, Controller, Get, HttpException, Param, Post, Req } from "@nestjs/common";
+import { Body, Controller, Get, HttpException, Param, Post, Query, Req } from "@nestjs/common";
 import type { SessionGatewayRequest } from "@alterx/auth";
 import type { ProblemDetails } from "@alterx/contracts";
 import {
@@ -65,9 +65,18 @@ export class ProjectReadController {
   }
 
   @Get()
-  async list(@Req() request: SessionGatewayRequest) {
+  async list(
+    @Req() request: SessionGatewayRequest,
+    @Query("cursor") cursor?: string,
+    @Query("limit") rawLimit?: string,
+  ) {
     try {
-      return { projects: await this.service.listProjects(requiredTenantId(request), requiredWorkspaceId(request)) };
+      return await this.service.listProjects(
+        requiredTenantId(request),
+        requiredWorkspaceId(request),
+        cursor,
+        rawLimit === undefined ? 50 : Number(rawLimit),
+      );
     } catch (error: unknown) {
       throw mapProjectError(error, request.url);
     }

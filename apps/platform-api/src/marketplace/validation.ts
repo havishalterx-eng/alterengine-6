@@ -24,12 +24,17 @@ const compatibilitySchema = z
     requiredEntitlements: z.array(z.enum(ENTITLEMENT_LIMIT_KEYS)).max(7),
   })
   .strict();
+const priceMinorSchema = z.string().refine(
+  (value) => /^(0|[1-9]\d{0,15})$/.test(value) && BigInt(value) <= BigInt(Number.MAX_SAFE_INTEGER),
+  "Expected nonnegative integer minor units within the supported range",
+);
 const createListingSchema = z
   .object({
     type: z.enum(listingTypes),
     name: z.string().trim().min(1).max(255),
     description: z.string().trim().min(1).max(10_000).optional(),
     license_type: z.enum(licenseTypes),
+    price_minor: priceMinorSchema.optional(),
   })
   .strict();
 const updateListingSchema = z
@@ -37,10 +42,12 @@ const updateListingSchema = z
     name: z.string().trim().min(1).max(255).optional(),
     description: z.string().trim().min(1).max(10_000).nullable().optional(),
     license_type: z.enum(licenseTypes).optional(),
+    price_minor: priceMinorSchema.optional(),
     status: z.enum(listingStatuses).optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, "At least one field required");
+const staffTransitionSchema = z.object({ status: z.enum(["automated_review", "human_review", "private_testing"]) }).strict();
 const createVersionSchema = z
   .object({
     version: z.string().regex(semverPattern, "Expected semantic version"),
@@ -61,12 +68,16 @@ const createReviewSchema = z
 
 export function parseCreateListing(input: unknown, instance: string): CreateListingInput {
   const value = parse(createListingSchema, input, instance);
-  return { type: value.type, name: value.name, license_type: value.license_type, ...(value.description === undefined ? {} : { description: value.description }) };
+  return { type: value.type, name: value.name, license_type: value.license_type, ...(value.description === undefined ? {} : { description: value.description }), ...(value.price_minor === undefined ? {} : { price_minor: value.price_minor }) };
 }
 
 export function parseUpdateListing(input: unknown, instance: string): UpdateListingInput {
   const value = parse(updateListingSchema, input, instance);
-  return { ...(value.name === undefined ? {} : { name: value.name }), ...(value.description === undefined ? {} : { description: value.description }), ...(value.license_type === undefined ? {} : { license_type: value.license_type }), ...(value.status === undefined ? {} : { status: value.status }) };
+  return { ...(value.name === undefined ? {} : { name: value.name }), ...(value.description === undefined ? {} : { description: value.description }), ...(value.license_type === undefined ? {} : { license_type: value.license_type }), ...(value.price_minor === undefined ? {} : { price_minor: value.price_minor }), ...(value.status === undefined ? {} : { status: value.status }) };
+}
+
+export function parseStaffTransition(input: unknown, instance: string) {
+  return parse(staffTransitionSchema, input, instance).status;
 }
 
 export function parseCreateListingVersion(
@@ -123,6 +134,13 @@ export function parseListingId(value: string, instance: string): string {
   return value;
 }
 
+export function parseMarketplaceTenantId(value: string, instance: string): string {
+  if (!/^ten_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+    throw invalid(instance, [{ field: "tenantId", message: "Expected tenant UUIDv7" }]);
+  }
+  return value;
+}
+
 export function parseListingQuery(
   query: Record<string, string | undefined>,
   instance: string,
@@ -133,9 +151,11 @@ export function parseListingQuery(
   }
   const type = query.type === undefined ? undefined : z.enum(listingTypes).safeParse(query.type);
   const status = query.status === undefined ? undefined : z.enum(listingStatuses).safeParse(query.status);
+  if (query.owner !== undefined && query.owner !== "me") throw invalid(instance, [{ field: "owner", message: "Expected me" }]);
   if (type && !type.success) throw invalid(instance, [{ field: "type", message: "Invalid listing type" }]);
   if (status && !status.success) throw invalid(instance, [{ field: "status", message: "Invalid listing status" }]);
   return {
+    ...(query.owner === "me" ? { owner: "me" as const } : {}),
     ...(type ? { type: type.data } : {}),
     ...(status ? { status: status.data } : {}),
     ...(query.cursor === undefined ? {} : { cursor: query.cursor }),

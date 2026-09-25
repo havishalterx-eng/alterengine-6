@@ -28,6 +28,42 @@ export function formatCurrency(amount: number, forceCurrency?: string): string {
   }).format(convertedAmount)
 }
 
+/**
+ * What a listing costs.
+ *
+ * A price that came from the API is already in its own currency, so it is
+ * formatted from its minor units and never touched by the demo currency
+ * switcher's mock rate -- which was turning a 499 rupee listing into 41,666.50.
+ * Demo listings carry no minor amount and keep the mock-money behaviour.
+ */
+export function formatListingPrice(pricing: {
+  type: "free" | "paid"
+  price?: number
+  currency?: string
+  priceMinor?: string
+}): string {
+  if (pricing.type === "free") return "Free"
+  if (pricing.priceMinor !== undefined) {
+    return formatMinorCurrency(pricing.priceMinor, pricing.currency ?? "INR")
+  }
+  return formatCurrency(pricing.price ?? 0, pricing.currency)
+}
+
+/** Format the provider's minor-unit amount without applying the mock display FX rate. */
+export function formatMinorCurrency(amountMinor: string, currency: string): string {
+  if (!/^\d+$/.test(amountMinor)) throw new Error("Invalid minor-unit amount")
+  const minor = BigInt(amountMinor)
+  const whole = minor / 100n
+  const fraction = (minor % 100n).toString().padStart(2, "0")
+  const formatter = new Intl.NumberFormat(currency === "INR" ? "en-IN" : "en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return formatter.formatToParts(whole).map(part => part.type === "fraction" ? fraction : part.value).join("")
+}
+
 export function formatCompactNumber(amount: number): string {
   return new Intl.NumberFormat("en-US", {
     notation: "compact",

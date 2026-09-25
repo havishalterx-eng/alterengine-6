@@ -68,6 +68,7 @@ import { PayoutsPage } from "@/features/seller/pages/payouts"
 import { KycPage } from "@/features/seller/pages/kyc"
 import { NotificationCentrePage } from "@/features/notifications/pages/notification-centre"
 import { NotificationPreferencesPage } from "@/features/settings/pages/notification-preferences"
+import { DataResidencySettings } from "@/features/settings/pages/data-residency"
 import { DiscoveryPage } from "@/features/discovery/pages/discovery-page"
 import { BenchmarkListPage } from "@/features/benchmarks/pages/benchmark-list"
 import { CreateBenchmarkPage } from "@/features/benchmarks/pages/create-benchmark"
@@ -75,6 +76,7 @@ import { BenchmarkDetailPage } from "@/features/benchmarks/pages/benchmark-detai
 import { SettingsAudit } from "@/features/settings/pages/audit"
 import { SettingsSupport } from "@/features/settings/pages/support"
 import { NotFound } from "@/components/feedback/not-found"
+import { LiveFeatureGate } from "@/features/availability/live-feature-gate"
 
 const WorkflowBuilder = lazy(() =>
   import("@/features/workflows/pages/workflow-builder").then(({ WorkflowBuilder }) => ({
@@ -348,28 +350,29 @@ export const router = createBrowserRouter([
           { path: "security", element: <SecuritySettings /> },
           { path: "sessions", element: <SessionsPage /> },
           { path: "language", element: <LanguageSettings /> },
-          { path: "notifications", element: <NotificationPreferencesPage /> },
+          { path: "notifications", element: <LiveFeatureGate feature="notifications"><NotificationPreferencesPage /></LiveFeatureGate> },
           { path: "credentials", element: <RequirePermission permission="credential.read"><CredentialsVaultPage /></RequirePermission> },
           { path: "webhooks", element: <RequirePermission permission="webhook.read"><WebhooksPage /></RequirePermission> },
           { path: "workspace", element: <WorkspaceSettings /> },
           { path: "members", element: <MembersPage /> },
           { path: "roles", element: <RolesPage /> },
+          { path: "data-residency", element: <DataResidencySettings /> },
           { path: "audit", element: <RequirePermission permission="audit.read"><SettingsAudit /></RequirePermission> },
           { path: "support", element: <SettingsSupport /> },
         ]
       },
 
-      { path: "notifications", element: <NotificationCentrePage /> },
-      { path: "discover", element: <DiscoveryPage /> },
-      { path: "benchmarks", element: <BenchmarkListPage /> },
-      { path: "benchmarks/new", element: <RequirePermission permission="benchmark.create"><CreateBenchmarkPage /></RequirePermission> },
-      { path: "benchmarks/:benchmarkId", element: <BenchmarkDetailPage /> },
+      { path: "notifications", element: <LiveFeatureGate feature="notifications"><NotificationCentrePage /></LiveFeatureGate> },
+      { path: "discover", element: <LiveFeatureGate feature="discovery"><DiscoveryPage /></LiveFeatureGate> },
+      { path: "benchmarks", element: <LiveFeatureGate feature="benchmarks"><BenchmarkListPage /></LiveFeatureGate> },
+      { path: "benchmarks/new", element: <LiveFeatureGate feature="benchmarks"><RequirePermission permission="benchmark.create"><CreateBenchmarkPage /></RequirePermission></LiveFeatureGate> },
+      { path: "benchmarks/:benchmarkId", element: <LiveFeatureGate feature="benchmarks"><BenchmarkDetailPage /></LiveFeatureGate> },
       { path: "*", element: <NotFound /> },
     ],
   },
   {
     path: "/app/admin",
-    element: <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading admin console…</div>}><AdminLayout /></Suspense>,
+    element: <LiveFeatureGate feature="admin-console"><Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading admin console…</div>}><AdminLayout /></Suspense></LiveFeatureGate>,
     children: [
       { path: "", element: <AdminHome /> },
       { path: "tenants", element: <TenantList /> },

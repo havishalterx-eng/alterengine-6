@@ -18,7 +18,21 @@ export interface RequestPlanChangesInput {
 
 export type EmptyProjectActionInput = Record<string, never>;
 
-export interface ProjectSummary {
+export interface ProjectResource {
+  project_id: string;
+  workspace_id: string;
+  status: string;
+  brief: string;
+  [key: string]: JsonValue;
+}
+
+/**
+ * What the engine's project read routes return, which is not the shape
+ * ProjectResource describes: the create route answers with the planning
+ * resource above, while the read routes answer from the `projects` table
+ * (0019_create_projects.sql) in camelCase.
+ */
+export interface ProjectRecord {
   id: string;
   tenantId: string;
   workspaceId: string;
@@ -26,14 +40,16 @@ export interface ProjectSummary {
   status: string;
   createdAt: string;
   updatedAt: string;
+  [key: string]: JsonValue;
 }
 
-export interface ProjectResource {
-  project_id: string;
-  workspace_id: string;
-  status: string;
-  brief: string;
-  [key: string]: JsonValue;
+export interface ProjectList {
+  data: ProjectRecord[];
+  page: {
+    next_cursor: string | null;
+    has_more: boolean;
+    limit: number;
+  };
 }
 
 export interface ProjectClarification {

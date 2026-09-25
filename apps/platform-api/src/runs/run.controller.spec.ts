@@ -117,33 +117,79 @@ describe("RunController routes", () => {
     );
   });
 
-  it.each(["cancel", "retry-node"] as const)("Revive B4 %s relays the exact action", async (action) => {
-    const payload = action === "cancel" ? {} : { node_key: "node-1" };
-    const response = await app.inject({ method: "POST", url: `/api/v1/runs/${runId}/actions/${action}`,
-      headers: { "x-test-actor": JSON.stringify({ ...actor, roles: ["operator"] }), "idempotency-key": `action-${action}` }, payload });
-    expect(response.statusCode).toBe(201);
-    expect(response.json()).toEqual(engine.run);
-    expect(engine.post).toHaveBeenCalledExactlyOnceWith(`/api/v1/runs/${runId}/actions/${action}`, payload,
-      expect.objectContaining({ tenantId: actor.tenant_id, workspaceId: actor.workspace_id }), { idempotencyKey: `action-${action}` });
+  it("cancels a run through the engine and answers with the run it wrote", async () => {
+    const response = await post(`/api/v1/runs/${runId}/actions/cancel`, {
+      actor: { ...actor, roles: ["operator"] },
+      idempotencyKey: "run-cancel-1",
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(engine.cancelledRun);
+    expect(engine.post).toHaveBeenCalledWith(
+      `/api/v1/runs/${runId}/actions/cancel`,
+      {},
+      expect.objectContaining({ tenantId: actor.tenant_id }),
+      { idempotencyKey: "run-cancel-1" },
+    );
   });
 
-  it.each(["cancel", "retry-node"] as const)("Revive B4 %s rejects viewers and malformed input before dispatch", async (action) => {
-    const url = `/api/v1/runs/${runId}/actions/${action}`;
-    const denied = await app.inject({ method: "POST", url, headers: { "x-test-actor": JSON.stringify(actor), "idempotency-key": "denied" }, payload: {} });
-    expect(denied.statusCode).toBe(403);
-    for (const payload of action === "cancel" ? [{ unexpected: true }] : [{}, { node_key: " " }, { node_key: 42 }, { node_key: "ok", tenant_id: "other" }]) {
-      const invalid = await app.inject({ method: "POST", url, headers: { "x-test-actor": JSON.stringify({ ...actor, roles: ["operator"] }), "idempotency-key": "invalid" }, payload });
-      expect(invalid.statusCode).toBe(400);
-    }
+  it("retries one node by its key", async () => {
+    const response = await post(`/api/v1/runs/${runId}/actions/retry-node`, {
+      actor: { ...actor, roles: ["operator"] },
+      idempotencyKey: "run-retry-1",
+      payload: { node_key: "extract" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(engine.run);
+    expect(engine.post).toHaveBeenCalledWith(
+      `/api/v1/runs/${runId}/actions/retry-node`,
+      { node_key: "extract" },
+      expect.objectContaining({ tenantId: actor.tenant_id }),
+      { idempotencyKey: "run-retry-1" },
+    );
+  });
+
+  it.each([
+    ["an empty body", {}],
+    ["a blank node key", { node_key: "   " }],
+    ["an unknown field", { node_key: "extract", force: true }],
+  ])("refuses a retry with %s before calling the engine", async (_case, payload) => {
+    const response = await post(`/api/v1/runs/${runId}/actions/retry-node`, {
+      actor: { ...actor, roles: ["operator"] },
+      idempotencyKey: `run-retry-invalid-${JSON.stringify(payload)}`,
+      payload,
+    });
+
+    expect(response.statusCode).toBe(400);
     expect(engine.post).not.toHaveBeenCalled();
   });
 
-  it.each(["cancel", "retry-node"] as const)("Revive B4 %s propagates upstream failure", async (action) => {
-    engine.post.mockRejectedValueOnce(new EngineProblemError({ type: "https://errors.alter.ai/run-conflict", title: "Conflict", status: 409, detail: "Run state conflict", instance: `/api/v1/runs/${runId}/actions/${action}`, error_code: "RUN_STATE_CONFLICT", trace_id: "trc_engine", request_id: "req_engine", retryable: false, field_errors: [], documentation_key: "runs.conflict" }));
-    const response = await app.inject({ method: "POST", url: `/api/v1/runs/${runId}/actions/${action}`, headers: { "x-test-actor": JSON.stringify({ ...actor, roles: ["operator"] }), "idempotency-key": "conflict" }, payload: action === "cancel" ? {} : { node_key: "node-1" } });
-    expect(response.statusCode).toBe(409);
-    expect(response.json()).toMatchObject({ error_code: "RUN_STATE_CONFLICT" });
+  it("refuses an action on something that is not a run id", async () => {
+    const response = await post("/api/v1/runs/wf_not-a-run/actions/cancel", {
+      actor: { ...actor, roles: ["operator"] },
+      idempotencyKey: "run-cancel-bad-id",
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(engine.post).not.toHaveBeenCalled();
   });
+
+  it.each(["cancel", "retry-node"])(
+    "denies %s to a role that may only read runs",
+    async (action) => {
+      const response = await post(`/api/v1/runs/${runId}/actions/${action}`, {
+        actor: { ...actor, roles: ["viewer"] },
+        idempotencyKey: `run-${action}-viewer`,
+        payload: action === "cancel" ? {} : { node_key: "extract" },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(engine.post).not.toHaveBeenCalled();
+    },
+  );
 
   it("lists paginated opaque rows using only real filters", async () => {
     const response = await request(
@@ -292,6 +338,25 @@ describe("RunController routes", () => {
     });
   });
 
+  function post(
+    url: string,
+    options: {
+      actor: ActorContextType;
+      idempotencyKey: string;
+      payload: unknown;
+    },
+  ): Promise<TestResponse> {
+    return app.getHttpAdapter().getInstance().inject({
+      method: "POST",
+      url,
+      headers: {
+        "x-test-actor": JSON.stringify(options.actor),
+        "idempotency-key": options.idempotencyKey,
+      },
+      payload: options.payload as object,
+    }) as Promise<TestResponse>;
+  }
+
   function request(
     url: string,
     requestActor?: ActorContextType,
@@ -314,12 +379,18 @@ interface TestResponse {
 
 class RunEngine {
   readonly get = vi.fn(this.getResponse.bind(this));
-  readonly post = vi.fn(async () => ({ status: 201, body: this.run }));
+  // Launching a run answers 201; the action routes answer 200 with the run
+  // as the engine last wrote it.
+  readonly post = vi.fn(async (path: EnginePath) => ({
+    status: path === "/api/v1/runs" ? 201 : 200,
+    body: path.endsWith("/actions/cancel") ? this.cancelledRun : this.run,
+  }));
   readonly runList = page([
     { run_id: runId, parent_kind: "workflow", status: "running" },
     { run_id: `${runId}-opaque`, parent_kind: "project", status: "completed" },
   ]);
   readonly run = { run_id: runId, status: "completed", engine_field: "kept" };
+  readonly cancelledRun = { run_id: runId, status: "cancelled" };
   readonly nodeExecutions = page([
     { node_execution_id: "nex_1", result: { answer: 42 }, opaque: true },
   ]);

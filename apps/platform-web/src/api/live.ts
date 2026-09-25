@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPatch, apiPost, mutationKey } from "./http"
+import { apiDelete, apiGet, apiGetWithEtag, apiPatch, apiPost, apiPut, mutationKey } from "./http"
 import { compileDag } from "./compile-dag"
 import type {
   HumanActionFilters,
@@ -10,6 +10,7 @@ import type {
   NodeTypeDefinition,
   Profile,
   Project,
+  ProjectClarification,
   ProjectFile,
   Run,
   Session,
@@ -17,8 +18,11 @@ import type {
   Trigger,
   WebhookEndpoint,
   Workflow,
+  WorkflowSafeguards,
   Workspace,
   WorkspaceRole,
+  TenantDataResidency,
+  TenantDataResidencySettings,
   HumanAction,
   HumanActionType,
   HumanActionStatus,
@@ -80,6 +84,63 @@ export async function getDashboardOverview(fallback: DashboardOverview): Promise
 export async function getWorkspaces(): Promise<Workspace[]> {
   const body = await apiGet<unknown>("/api/v1/workspaces")
   return asArray(body, "workspaces").map(mapWorkspace)
+}
+
+interface TenantViewResponse {
+  id?: unknown
+  name?: unknown
+  role?: unknown
+}
+
+interface TenantDataResidencyResponse {
+  data_residency?: {
+    allowed?: unknown
+    legal_basis?: unknown
+  } | null
+}
+
+export async function getTenantDataResidencySettings(): Promise<TenantDataResidencySettings> {
+  const tenants = asArray(await apiGet<unknown>("/api/v1/tenants"), "tenants")
+  const tenant = tenants[0] as TenantViewResponse | undefined
+  if (!tenant || typeof tenant.id !== "string") {
+    throw new Error("Current tenant not found")
+  }
+
+  const tenantId = tenant.id
+  const { data, etag } = await apiGetWithEtag<TenantDataResidencyResponse>(
+    `/api/v1/tenants/${encodeURIComponent(tenantId)}/data-residency`,
+  )
+
+  return {
+    tenantId,
+    tenantName: typeof tenant.name === "string" ? tenant.name : "Tenant",
+    role: mapTenantRole(tenant.role),
+    dataResidency: mapTenantDataResidency(data.data_residency),
+    ...(etag === undefined ? {} : { etag }),
+  }
+}
+
+export async function updateTenantDataResidencySettings(
+  tenantId: string,
+  dataResidency: TenantDataResidency | null,
+  etag: string | undefined,
+): Promise<TenantDataResidencySettings> {
+  if (!etag) throw new Error("Tenant data residency ETag missing")
+  await apiPut(
+    `/api/v1/tenants/${encodeURIComponent(tenantId)}/data-residency`,
+    {
+      data_residency: dataResidency === null
+        ? null
+        : {
+            allowed: dataResidency.allowed,
+            ...(dataResidency.legalBasis
+              ? { legal_basis: dataResidency.legalBasis }
+              : {}),
+          },
+    },
+    { ifMatch: etag },
+  )
+  return getTenantDataResidencySettings()
 }
 
 export async function createWorkspace(data: { name: string; slug: string }): Promise<Workspace> {
@@ -156,6 +217,61 @@ export async function getWorkflows(): Promise<Workflow[]> {
 
 export async function getWorkflow(id: string): Promise<Workflow> {
   return mapWorkflow(await apiGet<unknown>(`/api/v1/workflows/${encodeURIComponent(id)}`))
+}
+
+interface SafeguardsResponse {
+  workspace?: { contains_pii?: unknown; approve_external_actions?: unknown }
+  additions?: SafeguardSet
+  effective?: SafeguardSet
+}
+interface SafeguardSet {
+  customer_visible?: unknown
+  contains_pii?: unknown
+  approve_external_actions?: unknown
+}
+
+export async function getWorkflowSafeguards(id: string): Promise<WorkflowSafeguards> {
+  const { data, etag } = await apiGetWithEtag<SafeguardsResponse>(
+    `/api/v1/workflows/${encodeURIComponent(id)}/safeguards`,
+  )
+  return {
+    workspace: {
+      containsPii: data.workspace?.contains_pii === true,
+      approveExternalActions: data.workspace?.approve_external_actions === true,
+    },
+    additions: safeguardSet(data.additions),
+    effective: safeguardSet(data.effective),
+    ...(etag === undefined ? {} : { etag }),
+  }
+}
+
+export async function updateWorkflowSafeguards(
+  id: string,
+  additions: WorkflowSafeguards["additions"],
+  etag: string | undefined,
+): Promise<WorkflowSafeguards> {
+  await apiPut<unknown>(
+    `/api/v1/workflows/${encodeURIComponent(id)}/safeguards`,
+    {
+      additions: {
+        customer_visible: additions.customerVisible,
+        contains_pii: additions.containsPii,
+        approve_external_actions: additions.approveExternalActions,
+      },
+    },
+    // The route requires If-Match over the whole view, so a save made against
+    // a stale workspace rule is refused rather than silently applied.
+    etag === undefined ? {} : { ifMatch: etag },
+  )
+  return getWorkflowSafeguards(id)
+}
+
+function safeguardSet(value: SafeguardSet | undefined): WorkflowSafeguards["additions"] {
+  return {
+    customerVisible: value?.customer_visible === true,
+    containsPii: value?.contains_pii === true,
+    approveExternalActions: value?.approve_external_actions === true,
+  }
 }
 
 export async function createWorkflow(goal: string): Promise<Workflow> {
@@ -430,6 +546,31 @@ export async function startProjectBuild(id: string): Promise<{ runId: string }> 
   return { runId: String(body.run_id ?? body.runId ?? body.build_id ?? body.id ?? "") }
 }
 
+// The planner asks these while a project's plan is still being written; the
+// engine keeps them on the plan's conversation and answers the open ones
+// only. `options` is always empty -- no option vocabulary exists anywhere
+// behind this -- so an answer is free text.
+export async function getProjectClarifications(id: string): Promise<ProjectClarification[]> {
+  const body = await apiGet<unknown>(`/api/v1/projects/${encodeURIComponent(id)}/clarifications`)
+  return asArray(body, "data").map((item) => ({
+    id: String(item.clarification_id ?? item.id ?? ""),
+    question: String(item.question ?? ""),
+    required: item.required !== false,
+  }))
+}
+
+export async function answerProjectClarification(
+  id: string,
+  clarificationId: string,
+  answer: string,
+): Promise<void> {
+  await apiPost(
+    `/api/v1/projects/${encodeURIComponent(id)}/clarifications/${encodeURIComponent(clarificationId)}/answer`,
+    { answer },
+    { idempotencyKey: mutationKey("project-clarification-answer") },
+  )
+}
+
 export async function approveProjectPlan(id: string): Promise<void> {
   await apiPost(`/api/v1/projects/${encodeURIComponent(id)}/plan/actions/approve`, {}, {
     idempotencyKey: mutationKey("project-plan-approve"),
@@ -463,7 +604,9 @@ export async function getProjectPreview(id: string): Promise<{ url: string; stat
 
 export async function getTriggers(workflowId: string): Promise<Trigger[]> {
   const body = await apiGet<unknown>(`/api/v1/triggers?workflowId=${encodeURIComponent(workflowId)}`)
-  return asArray(body, "triggers").map(mapTrigger)
+  return asArray(body, "triggers")
+    .filter((item) => item.status !== "archived")
+    .map(mapTrigger)
 }
 
 export async function getTrigger(id: string): Promise<Trigger> {
@@ -478,10 +621,21 @@ export async function createTrigger(data: Partial<Trigger>): Promise<Trigger> {
 }
 
 export async function updateTrigger(id: string, data: Partial<Trigger>): Promise<Trigger> {
-  const current = await getTrigger(id)
-  return mapTrigger(await apiPatch(`/api/v1/triggers/${encodeURIComponent(id)}/status`, { status: data.enabled === false ? "disabled" : data.status }, {
+  if (data.enabled === undefined) {
+    throw new Error("Trigger updates require an enabled state")
+  }
+  return setTriggerStatus(id, data.enabled ? "enabled" : "disabled")
+}
+
+async function setTriggerStatus(id: string, status: "enabled" | "disabled" | "archived"): Promise<Trigger> {
+  const path = `/api/v1/triggers/${encodeURIComponent(id)}`
+  const current = await apiGetWithEtag<unknown>(path)
+  if (!current.etag) {
+    throw new Error("Trigger ETag missing")
+  }
+  return mapTrigger(await apiPatch(`${path}/status`, { status }, {
     idempotencyKey: mutationKey("trigger-status"),
-    ifMatch: `"${current.updatedAt}"`,
+    ifMatch: current.etag,
   }))
 }
 
@@ -490,8 +644,10 @@ export async function testTrigger(id: string): Promise<{ success: boolean; messa
     idempotencyKey: mutationKey("trigger-test"),
   })
   const eventId = body?.eventId ?? body?.event_id
-  if (typeof eventId !== "string" || !eventId.trim()) throw new Error("Trigger test returned no event ID")
-  return { success: true, message: "Trigger test accepted.", eventId }
+  if (typeof eventId !== "string" || !eventId.startsWith("evt_")) {
+    throw new Error("No test event was returned")
+  }
+  return { success: true, message: "Test event recorded.", eventId }
 }
 
 export async function enableTrigger(id: string): Promise<Trigger> {
@@ -501,7 +657,11 @@ export async function enableTrigger(id: string): Promise<Trigger> {
 }
 
 export async function disableTrigger(id: string): Promise<Trigger> {
-  return updateTrigger(id, { status: "configured", enabled: false })
+  return setTriggerStatus(id, "disabled")
+}
+
+export async function removeTrigger(id: string): Promise<void> {
+  await setTriggerStatus(id, "archived")
 }
 
 export async function getEvents(filters?: any): Promise<IncomingEvent[]> {
@@ -923,6 +1083,36 @@ function mapWorkspace(value: unknown): Workspace {
   }
 }
 
+function mapTenantRole(value: unknown): TenantDataResidencySettings["role"] {
+  if (value === "owner" || value === "admin" || value === "billing") return value
+  return "member"
+}
+
+function mapTenantDataResidency(
+  value: TenantDataResidencyResponse["data_residency"],
+): TenantDataResidency | null {
+  if (value === null) return null
+  if (!value || !Array.isArray(value.allowed)) {
+    throw new Error("Tenant data residency response is malformed")
+  }
+  const allowed = value.allowed
+  if (
+    allowed.length < 1 ||
+    allowed.length > 32 ||
+    allowed.some((code) => typeof code !== "string" || code.trim().length === 0) ||
+    (value.legal_basis !== undefined &&
+      (typeof value.legal_basis !== "string" || value.legal_basis.trim().length === 0))
+  ) {
+    throw new Error("Tenant data residency response is malformed")
+  }
+  return {
+    allowed: allowed.map((code) => (code as string).trim()),
+    ...(typeof value.legal_basis === "string"
+      ? { legalBasis: value.legal_basis.trim() }
+      : {}),
+  }
+}
+
 function mapMember(value: unknown): Member {
   const item = value as AnyRecord
   const email = String(item.email ?? item.invited_email ?? "")
@@ -1074,10 +1264,14 @@ function mapTrigger(value: unknown): Trigger {
   return {
     id: asString(item.id ?? item.trigger_id),
     workflowId: asString(item.workflowId ?? item.workflow_id),
-    type: String(item.type ?? "webhook") as Trigger["type"],
+    type: (item.type === "cron" ? "schedule" : String(item.type ?? "webhook")) as Trigger["type"],
     name: String(item.name ?? "Trigger"),
-    enabled: Boolean(item.enabled ?? status === "active"),
-    status: (status === "active" ? "configured" : status) as Trigger["status"],
+    enabled: status === "enabled" || Boolean(item.enabled),
+    status: (status === "enabled" || status === "disabled"
+      ? "configured"
+      : status === "draft" || status === "archived"
+        ? "needs_configuration"
+        : status) as Trigger["status"],
     config: item.config ?? {},
     lastTriggeredAt: item.lastTriggeredAt ?? item.last_triggered_at,
     lastTestedAt: item.lastTestedAt ?? item.last_tested_at,
@@ -1135,6 +1329,8 @@ function mapRunStatus(value: unknown): Run["status"] {
 function mapProjectStatus(value: unknown): Project["status"] {
   if (value === "planning" || value === "building" || value === "testing" || value === "completed" || value === "archived") return value
   if (value === "ready") return "ready"
+  // What the projects row itself stores, now that the read routes exist.
+  if (value === "active") return "active"
   return "draft"
 }
 
@@ -1192,14 +1388,10 @@ export async function getHumanActions(filters?: HumanActionFilters): Promise<Hum
 }
 
 export async function getHumanAction(id: string): Promise<HumanAction> {
-  // We don't know the exact type from just the ID to hit the specialized endpoint directly without knowing its source,
-  // but usually we get it from the list. However, if we must fetch one by ID, we'd have to try each or rely on a list filter.
-  // Wait, does the backend have a generic `GET /api/v1/action-centre/:id`? No.
-  // So we fetch the list and find it.
-  const actions = await getHumanActions()
-  const action = actions.find((a) => a.id === id)
-  if (!action) throw new Error("Human action not found")
-  return action
+  // One action, read directly: the id names its own family, so the action
+  // centre reads it from the right engine collection. This used to load the
+  // whole queue and search it, which missed anything past the first page.
+  return mapHumanAction(await apiGet<unknown>(`/api/v1/action-centre/${encodeURIComponent(id)}`))
 }
 
 function mapAnnotation(value: unknown): HumanAnnotation {

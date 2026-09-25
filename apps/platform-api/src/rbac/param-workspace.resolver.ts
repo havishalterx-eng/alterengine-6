@@ -132,11 +132,28 @@ export class CachedEngineResourceLookup implements ResourceWorkspaceLookup {
   }
 }
 
-function snakeField(field: string) {
-  return (body: Record<string, unknown>): string | undefined =>
-    typeof body[field] === "string" && (body[field] as string).length > 0
-      ? (body[field] as string)
-      : undefined;
+/**
+ * Reads the workspace off an engine response by either spelling of the
+ * field, because the engine is not consistent about it: runs and the Action
+ * Centre families answer `workspace_id`, while workflows, projects, triggers
+ * and artifacts answer `workspaceId`. A lookup naming only one spelling
+ * reads undefined for the other and fails closed -- which is how every
+ * workflow and project id route came to answer 403 to the very workspace
+ * that owns the resource.
+ */
+function workspaceField(field: string) {
+  const spellings = [
+    field,
+    field.replace(/_([a-z])/g, (_match, letter: string) => letter.toUpperCase()),
+    field.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
+  ];
+  return (body: Record<string, unknown>): string | undefined => {
+    for (const spelling of spellings) {
+      const value = body[spelling];
+      if (typeof value === "string" && value.length > 0) return value;
+    }
+    return undefined;
+  };
 }
 
 /** platform_db-backed lookup for oauth connection ids -- the rows live
@@ -233,6 +250,14 @@ export class ParamWorkspaceResolver implements ResourceWorkspaceResolver {
 
 /** Production registry (EnforcingRbacModule). Order matters: specific
  * param families before the marker-gated bare-`id` fallbacks. */
+/** The engine collection an Action Centre id belongs to, by its prefix. */
+function actionCentreSegment(resourceId: string): string | undefined {
+  if (resourceId.startsWith("apr_")) return "approvals";
+  if (resourceId.startsWith("esc_")) return "escalations";
+  if (resourceId.startsWith("clr_")) return "clarifications";
+  return undefined;
+}
+
 export function defaultWorkspaceResolutionRules(deps: {
   readonly engineClient: EngineClient;
   readonly db: PlatformDb;
@@ -242,7 +267,7 @@ export function defaultWorkspaceResolutionRules(deps: {
     pathFor: (id: string) => string,
     field: string,
   ): ResourceWorkspaceLookup =>
-    new CachedEngineResourceLookup(engineClient, pathFor, snakeField(field));
+    new CachedEngineResourceLookup(engineClient, pathFor, workspaceField(field));
 
   const approvalLike = (segment: string): ResourceWorkspaceLookup =>
     engine((id) => `/api/v1/${segment}/${id}`, "workspace_id");
@@ -257,6 +282,20 @@ export function defaultWorkspaceResolutionRules(deps: {
     // artifacts response, unlike runs'/workflows', was never snake_cased.
     { paramNames: ["artifactId", "artifact_id"], lookup: engine((id) => `/api/v1/artifacts/${id}`, "workspaceId") },
     { paramNames: ["triggerId", "trigger_id"], lookup: engine((id) => `/api/v1/triggers/${id}`, "workspaceId") },
+    // The Action Centre addresses an item of any family by its own id; the
+    // prefix says which engine collection owns it.
+    {
+      paramNames: ["actionId"],
+      pathMarkers: ["/action-centre/"],
+      lookup: {
+        async getWorkspaceId(actor, resourceId) {
+          const segment = actionCentreSegment(resourceId);
+          return segment === undefined
+            ? undefined
+            : approvalLike(segment).getWorkspaceId(actor, resourceId);
+        },
+      },
+    },
     { paramNames: ["approvalId", "approval_id"], lookup: approvalLike("approvals") },
     { paramNames: ["escalationId", "escalation_id"], lookup: approvalLike("escalations") },
     { paramNames: ["clarificationId", "clarification_id"], lookup: approvalLike("clarifications") },

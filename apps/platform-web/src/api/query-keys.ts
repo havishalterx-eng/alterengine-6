@@ -7,6 +7,7 @@ export const queryKeys = {
     all: ["workflows"] as const,
     detail: (id: string) => ["workflows", id] as const,
     versions: (id: string) => ["workflows", id, "versions"] as const,
+    safeguards: (id: string) => ["workflows", id, "safeguards"] as const,
   },
   projects: {
     all: ["projects"] as const,
@@ -43,6 +44,7 @@ export const queryKeys = {
     profile: ["settings", "profile"] as const,
     sessions: ["settings", "sessions"] as const,
     language: ["settings", "language"] as const,
+    dataResidency: ["settings", "data-residency"] as const,
   },
   humanActions: {
     list: (filters?: any) => ["humanActions", "list", filters] as const,

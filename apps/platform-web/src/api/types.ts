@@ -14,6 +14,21 @@ export interface Workspace {
   createdAt: string
 }
 
+export type TenantRole = "owner" | "admin" | "billing" | "member"
+
+export interface TenantDataResidency {
+  allowed: string[]
+  legalBasis?: string
+}
+
+export interface TenantDataResidencySettings {
+  tenantId: string
+  tenantName: string
+  role: TenantRole
+  dataResidency: TenantDataResidency | null
+  etag?: string
+}
+
 export interface User {
   id: string
   name: string
@@ -254,12 +269,22 @@ export interface ChatMessage {
   createdAt: string
 }
 
-export type ProjectStatus = "draft" | "clarifying" | "planning" | "ready" | "building" | "testing" | "completed" | "archived"
+// "active" is what the projects table itself stores (draft/active/archived,
+// 0019_create_projects.sql); the richer words below come from the planning
+// resource rather than from the row.
+export type ProjectStatus = "draft" | "active" | "clarifying" | "planning" | "ready" | "building" | "testing" | "completed" | "archived"
 
 export interface ProjectBrief {
   goal: string
   primaryUsers: string
   coreCapabilities: string[]
+}
+
+/** A question the planner raised against a project's plan, answered in free text. */
+export interface ProjectClarification {
+  id: string
+  question: string
+  required: boolean
 }
 
 export interface ProjectPlanTask {
@@ -432,6 +457,17 @@ export type HumanActionTab = "open" | "claimed" | "resolved" | "all"
 export interface HumanActionFilters { status?: HumanActionTab; type?: HumanActionType }
 export type HumanActionResolution = "approved" | "rejected" | "answered" | "resolved" | "dismissed"
 export type HumanActionPriority = "low" | "normal" | "high" | "critical"
+
+/** What a workflow's plans run with, from the workspace and the workflow. */
+export interface WorkflowSafeguards {
+  /** The workspace's rules. A workflow can add to these, never switch them off. */
+  workspace: { containsPii: boolean; approveExternalActions: boolean }
+  additions: { customerVisible: boolean; containsPii: boolean; approveExternalActions: boolean }
+  /** What every plan of this workflow runs with: the workspace's rules or the workflow's. */
+  effective: { customerVisible: boolean; containsPii: boolean; approveExternalActions: boolean }
+  /** Sent back on save, so a change made since this read is refused. */
+  etag?: string
+}
 
 export interface HumanActionOption {
   id: string
@@ -821,22 +857,40 @@ export interface Budget {
 export interface BillingPlan {
   id: string;
   name: string;
-  priceMonthly?: number;
-  description: string;
-  features: string[];
-  limits?: Record<string, number | string>;
-  current?: boolean;
+  description: string | null;
+  amount: number;
+  currency: string;
+  interval: number;
+  period: "daily" | "weekly" | "monthly" | "yearly";
+  active: boolean;
+}
+
+export interface BillingSubscription {
+  id: string;
+  tenantId: string;
+  planId: string;
+  status: "created" | "authenticated" | "active" | "pending" | "halted" | "cancelled" | "completed" | "expired";
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  providerCustomerRef: string | null;
+  version: string;
+}
+
+export interface BillingPaymentMethod {
+  ref: string;
+  type: string;
+  brand: string | null;
+  last4: string | null;
 }
 
 export interface Invoice {
   id: string;
-  number: string;
-  status: "paid" | "open" | "failed" | "void";
+  subscriptionId: string | null;
+  status: string;
   amount: number;
   currency: string;
   issuedAt: string;
-  dueAt?: string;
-  pdfUrl?: string;
+  paidAt: string | null;
 }
 
 export interface CostEstimateItem {
@@ -855,7 +909,7 @@ export interface CostEstimate {
 }
 
 // --- Phase 8: Marketplace & Seller ---
-export type MarketplaceAssetType = "workflow_template" | "project_template" | "agent_pack" | "node_pack" | "knowledge_pack";
+export type MarketplaceAssetType = "workflow_template" | "project_template" | "agent" | "tool" | "agent_pack" | "node_pack" | "knowledge_pack";
 
 export interface SellerSummary {
   id: string;
@@ -872,12 +926,20 @@ export interface MarketplaceListing {
   assetType: MarketplaceAssetType;
   category: string;
   seller: SellerSummary;
-  pricing: { type: "free" } | { type: "paid"; price: number; currency: string; };
+  pricing:
+    | { type: "free" }
+    /**
+     * price is the major-unit amount the demo data uses, which the currency
+     * switcher converts with a mock rate. A listing read from the API sets
+     * priceMinor as well: that amount is already in its own currency and
+     * must be shown as-is, never converted.
+     */
+    | { type: "paid"; price: number; currency: string; priceMinor?: string };
   rating?: number;
   reviewCount?: number;
   installCount?: number;
   tags: string[];
-  status: "published" | "draft" | "review" | "rejected" | "archived";
+  status: "published" | "draft" | "private_testing" | "submitted" | "automated_review" | "human_review" | "suspended" | "deprecated" | "removed" | "review" | "rejected" | "archived";
   createdAt: string;
   updatedAt: string;
 }
@@ -924,11 +986,19 @@ export interface MarketplaceTransaction {
 
 export interface MarketplacePayout {
   id: string;
-  amount: number;
-  currency: string;
-  status: "pending" | "processing" | "paid" | "failed";
+  orderId: string;
+  totalMinor: string;
+  sellerShareMinor: string;
+  platformShareMinor: string;
+  status: "created" | "pending" | "processed" | "failed";
   createdAt: string;
-  paidAt?: string;
+}
+
+export interface SellerEarnings {
+  availableMinor: string;
+  pendingMinor: string;
+  paidMinor: string;
+  currency: "INR";
 }
 
 export interface GlobalSearchResult {
